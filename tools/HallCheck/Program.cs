@@ -1,0 +1,17 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using StrafeLab.Input;
+var seconds = args.Length > 0 ? int.Parse(args[0]) : 10;
+var output = args.Length > 1 ? Path.GetFullPath(args[1]) : Path.GetFullPath("work/hall/csharp-check.json");
+Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+var samples = new ConcurrentQueue<HallSample>();
+var states = new ConcurrentQueue<string>();
+var source = new Ace68HallSource(Path.GetDirectoryName(output)!);
+source.StatusChanged += (_, s) => { states.Enqueue(s); Console.WriteLine(s); };
+source.SampleReceived += (_, s) => samples.Enqueue(s);
+source.Start();
+var deadline=DateTime.UtcNow.AddSeconds(seconds);
+while(DateTime.UtcNow<deadline && !File.Exists(Path.ChangeExtension(output,".stop"))) await Task.Delay(250);
+await source.DisposeAsync();
+File.WriteAllText(output, JsonSerializer.Serialize(new {states,samples},new JsonSerializerOptions {WriteIndented=true}));
+Console.WriteLine($"Captured {samples.Count} Hall samples; recovery journal exists: {File.Exists(Path.Combine(Path.GetDirectoryName(output)!, "hall-debug-recovery.json"))}");
