@@ -1,0 +1,73 @@
+{
+  "date": "2026-09-23",
+  "vid": "41E4",
+  "pid": "2120",
+  "firmware": "0117",
+  "product": "Ace 68 Air-II",
+  "controlledCapture": {
+    "A": {
+      "reports": 125,
+      "distinctTravelValues": 93,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "D": {
+      "reports": 115,
+      "distinctTravelValues": 81,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "W": {
+      "reports": 93,
+      "distinctTravelValues": 71,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "S": {
+      "reports": 88,
+      "distinctTravelValues": 72,
+      "minimum": 0,
+      "maximum": 341
+    }
+  },
+  "independentCSharpCapture": {
+    "A": {
+      "reports": 66,
+      "distinctTravelValues": 30,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "D": {
+      "reports": 30,
+      "distinctTravelValues": 16,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "W": {
+      "reports": 12,
+      "distinctTravelValues": 8,
+      "minimum": 0,
+      "maximum": 341
+    },
+    "S": {
+      "reports": 43,
+      "distinctTravelValues": 17,
+      "minimum": 0,
+      "maximum": 341
+    }
+  },
+  "csharpStatusHistory": [
+    "Hall 通道已开启 · 等待手动按压 WASD 验证",
+    "Hall 连续键程已验证 · Raw Input 记录触发边沿",
+    "Hall 监测已关闭，原监测位已恢复"
+  ],
+  "webhidRestoration": {
+    "verified": true,
+    "allOriginal": true
+  },
+  "limitations": [
+    "Reported units divided by 100 are firmware millimeters, not independently measured mechanical accuracy.",
+    "Reports are change-driven; counts do not establish keyboard polling frequency.",
+    "The user performed the requested slow presses; no independent instrument labeled shallow/half/full depths per timestamp."
+  ]
+}
