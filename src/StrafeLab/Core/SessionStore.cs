@@ -34,8 +34,8 @@ public sealed class SessionStore
             Directory.CreateDirectory(SessionsDirectory);
             var path = GetPath(session.SessionId);
             var temporary = path + ".tmp";
-            var json = JsonSerializer.Serialize(session, _jsonOptions);
-            File.WriteAllText(temporary, json);
+            using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+                JsonSerializer.Serialize(stream, session, _jsonOptions);
             File.Move(temporary, path, overwrite: true);
             _revisions[session.SessionId]=session.Revision;
         }
@@ -47,7 +47,8 @@ public sealed class SessionStore
         if (!File.Exists(path)) return null;
         try
         {
-            return JsonSerializer.Deserialize<SessionDocument>(File.ReadAllText(path), _jsonOptions);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return JsonSerializer.Deserialize<SessionDocument>(stream, _jsonOptions);
         }
         catch { return null; }
     }
@@ -61,7 +62,8 @@ public sealed class SessionStore
         {
             try
             {
-                var session = JsonSerializer.Deserialize<SessionDocument>(File.ReadAllText(path), _jsonOptions);
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var session = JsonSerializer.Deserialize<SessionDocument>(stream, _jsonOptions);
                 if (session is not null) result.Add(TrendAnalyzer.Summarize(session));
             }
             catch { }
@@ -87,7 +89,8 @@ public static class TrendAnalyzer
     {
         var transitions = session.Transitions.Where(x => x.Confidence >= 0.55).ToArray();
         var shots = session.Shots.Where(x => x.Confidence >= 0.75).ToArray();
-        var modelShots=shots.Where(x=>x.ModelConfidence>=0.75).ToArray();
+        var modelShots=shots.Where(x=>x.ModelConfidence>=0.75&&CounterStrafeCohort.IsRifle(x.WeaponName)&&
+            x.RelatedTransitionUs.HasValue&&x.DeltaFromTransitionUs is >=0 and <=250_000).ToArray();
         return new SessionSummary
         {
             SessionId = session.SessionId,
@@ -97,7 +100,7 @@ public static class TrendAnalyzer
             ShotCount = shots.Length,
             AverageGapMs = transitions.Length == 0 ? 0 : transitions.Average(x => x.GapUs.GetValueOrDefault() / 1000d),
             AverageOverlapMs = transitions.Length == 0 ? 0 : transitions.Average(x => x.OverlapUs.GetValueOrDefault() / 1000d),
-            FireWindowRate = modelShots.Length == 0 ? 0 : modelShots.Count(x => x.IsWithinFireWindow) / (double)modelShots.Length,
+            FireWindowRate = modelShots.Length == 0 ? null : modelShots.Count(x => x.IsWithinFireWindow) / (double)modelShots.Length,
             ConfidenceRate = session.Transitions.Count == 0 ? 0 :
                 session.Transitions.Count(x => x.Confidence >= 0.75) / (double)session.Transitions.Count
         };

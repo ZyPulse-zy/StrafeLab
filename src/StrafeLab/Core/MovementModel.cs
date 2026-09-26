@@ -46,6 +46,9 @@ public sealed class MovementSimulator
 
         if (timestampUs < _lastTimestampUs.Value) return ToSample(_lastTimestampUs.Value,input,gsi);
         _maxSpeed = WeaponSpeed(gsi?.WeaponName, _parameters.MaxGroundSpeed);
+        // The input edge is not the end of CS2's duck/unduck transition.
+        // Keep estimates uncertain after either edge; only Demo can verify stance.
+        if(input.Crouch!=_lastInput.Crouch)MarkUncertain(timestampUs,1_000_000);
         if (input.Jump) MarkUncertain(timestampUs);
         if (timestampUs - _lastTimestampUs.Value > 500_000) MarkUncertain(timestampUs);
         var elapsedSeconds = Math.Clamp((timestampUs - _lastTimestampUs.Value) / 1_000_000d, 0, 0.5);
@@ -153,7 +156,7 @@ public sealed class MovementSimulator
             }
         }
 
-        if (input.Jump || input.Crouch || timestampUs < _uncertainUntil) confidence = Math.Min(confidence,0.35);
+        if (input.Jump || input.Crouch || input.Walk || timestampUs < _uncertainUntil) confidence = Math.Min(confidence,0.35);
         if (gsi?.WeaponName is "weapon_awp" or "weapon_ssg08" or "weapon_aug" or "weapon_sg556" or "weapon_scar20" or "weapon_g3sg1")
             confidence=Math.Min(confidence,.4); // GSI does not confirm scope state in normal play.
         _state.Confidence = confidence;

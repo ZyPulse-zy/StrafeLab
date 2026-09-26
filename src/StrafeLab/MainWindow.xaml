@@ -62,8 +62,8 @@
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="WORKSPACE" FontSize="10" FontWeight="SemiBold" Foreground="#58708F" Margin="4,0,0,12" />
-                            <Button Content="◉  实时分析" HorizontalContentAlignment="Left" Background="#19314E" BorderBrush="#2D6B9A" />
-                            <Button Content="▣  历史局" HorizontalContentAlignment="Left" Click="History_Click" />
+                            <Button x:Name="realtimeNav" Content="◉  实时分析" Click="Realtime_Click" HorizontalContentAlignment="Left" Background="#19314E" BorderBrush="#2D6B9A" />
+                            <Button x:Name="analysisNav" Content="▣  分析与统计" HorizontalContentAlignment="Left" Click="History_Click" />
                             <Button Content="⌁  训练反馈" HorizontalContentAlignment="Left" Click="Feedback_Click" />
                             <Button Content="⚙  连接与诊断" HorizontalContentAlignment="Left" Click="Diagnostics_Click" />
                             <Separator Margin="0,12" Background="{StaticResource BorderBrush}" />
@@ -79,7 +79,7 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="realtimePage" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="26,24,28,32">
                         <Grid Margin="0,0,0,22">
                             <Grid.ColumnDefinitions>
@@ -113,7 +113,7 @@
                                 <StackPanel>
                                     <TextBlock Text="输入可信样本" FontSize="11" Foreground="{StaticResource MutedBrush}" />
                                     <TextBlock x:Name="qualityText" Text="—" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" />
-                                    <TextBlock Text="按键边沿完整率" FontSize="11" Foreground="#58708F" Margin="0,4,0,0" />
+                                    <TextBlock Text="高置信度反向切换占比" FontSize="11" Foreground="#58708F" Margin="0,4,0,0" />
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource CardStyle}" Margin="0,0,10,0">
@@ -204,6 +204,7 @@
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
+                <ContentControl x:Name="analysisHost" Grid.Column="1" Visibility="Collapsed"/>
             </Grid>
         </Grid>
     </Border>

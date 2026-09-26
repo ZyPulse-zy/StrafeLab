@@ -1,0 +1,130 @@
+<UserControl x:Class="StrafeLab.UI.AnalysisPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:StrafeLab.UI">
+ <UserControl.Resources>
+  <Style x:Key="NavigationItem" TargetType="RadioButton">
+   <Setter Property="Foreground" Value="#9EAFAE"/><Setter Property="FontSize" Value="14"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,0,5"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton"><Border x:Name="nav" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="7" Padding="14,13"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="nav" Property="Background" Value="#29423D"/><Setter Property="Foreground" Value="#74D6BA"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="nav" Property="BorderBrush" Value="#486058"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="nav" Property="BorderBrush" Value="#74D6BA"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+  </Style>
+
+  <Style TargetType="DataGrid">
+   <Setter Property="AutoGenerateColumns" Value="False"/><Setter Property="IsReadOnly" Value="True"/>
+   <Setter Property="CanUserAddRows" Value="False"/><Setter Property="CanUserDeleteRows" Value="False"/>
+   <Setter Property="Background" Value="#1B2125"/><Setter Property="Foreground" Value="#DBE7F5"/>
+   <Setter Property="RowBackground" Value="#1B2125"/><Setter Property="AlternatingRowBackground" Value="#20282D"/>
+   <Setter Property="BorderThickness" Value="0"/><Setter Property="GridLinesVisibility" Value="None"/>
+   <Setter Property="HeadersVisibility" Value="Column"/><Setter Property="RowHeight" Value="31"/>
+   <Setter Property="SelectionMode" Value="Single"/><Setter Property="EnableRowVirtualization" Value="True"/>
+  </Style>
+  <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#252E33"/><Setter Property="Foreground" Value="#A8B8B4"/><Setter Property="Padding" Value="9"/><Setter Property="BorderThickness" Value="0"/><Setter Property="FontSize" Value="11"/></Style>
+  <Style TargetType="DataGridCell"><Setter Property="Padding" Value="8,4"/><Setter Property="BorderThickness" Value="0"/>
+   <Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#315149"/><Setter Property="Foreground" Value="White"/></Trigger></Style.Triggers>
+  </Style>
+  <Style TargetType="ComboBox"><Setter Property="Foreground" Value="#E1EAE7"/><Setter Property="Background" Value="#252E33"/><Setter Property="Height" Value="30"/><Setter Property="Margin" Value="0,0,10,8"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid>
+    <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}">
+     <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="box" Background="#252E33" BorderBrush="#465551" BorderThickness="1" CornerRadius="5"><Grid><Path Data="M 0 0 L 4 4 L 8 0" Stroke="#9EAFAE" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0"/></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="box" Property="BorderBrush" Value="#74D6BA"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+    </ToggleButton>
+    <ContentPresenter Margin="10,0,30,0" VerticalAlignment="Center" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+    <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"><Border MinWidth="{TemplateBinding ActualWidth}" Background="#252E33" BorderBrush="#465551" BorderThickness="1" Padding="3" CornerRadius="5"><ScrollViewer MaxHeight="350" CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer></Border></Popup>
+   </Grid><ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+   <Setter Property="ItemTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" Foreground="#E1EAE7"/></DataTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="#E1EAE7"/><Setter Property="Background" Value="#252E33"/><Setter Property="Padding" Value="9,7"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border x:Name="item" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="item" Property="Background" Value="#315149"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="item" Property="Background" Value="#29423D"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+  <Style TargetType="TabItem"><Setter Property="Foreground" Value="#B7CEE7"/><Setter Property="Padding" Value="18,9"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Border x:Name="tab" CornerRadius="8,8,0,0" Background="#1B2125" Padding="{TemplateBinding Padding}" Margin="0,0,5,0"><ContentPresenter ContentSource="Header"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="tab" Property="Background" Value="#315149"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </UserControl.Resources>
+ <Grid>
+  <Grid.ColumnDefinitions><ColumnDefinition Width="184"/><ColumnDefinition/></Grid.ColumnDefinitions>
+  <Border Background="#171D20" BorderBrush="#30393F" BorderThickness="0,0,1,0">
+   <DockPanel Margin="14,28,14,20">
+    <StackPanel DockPanel.Dock="Top" Margin="12,0,0,32"><TextBlock Text="StrafeLab." FontSize="25" FontWeight="Bold"/><TextBlock Text="手动急停 · 本地分析" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,7,0,0"/></StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Margin="12,18,4,0"><TextBlock Text="LOCAL FIRST" Foreground="{StaticResource AccentBrush}" FontSize="10"/><TextBlock Text="1.5 · 数据仅保存在本机" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,7,0,0"/></StackPanel>
+    <StackPanel>
+     <RadioButton x:Name="navOverview" GroupName="navigation" Content="趋势总览" Tag="0" Checked="Nav_Checked" Style="{StaticResource NavigationItem}"/>
+     <RadioButton x:Name="navKeyboard" GroupName="navigation" Content="键盘参数" Tag="1" Checked="Nav_Checked" Style="{StaticResource NavigationItem}"/>
+     <RadioButton x:Name="navDetails" GroupName="navigation" Content="对局明细" Tag="2" Checked="Nav_Checked" Style="{StaticResource NavigationItem}"/>
+     <Border Height="1" Background="#30393F" Margin="12,18,12,18"/>
+     <RadioButton x:Name="navDemos" GroupName="navigation" Content="Demo 资料库" Tag="3" Checked="Nav_Checked" Style="{StaticResource NavigationItem}"/>
+     <RadioButton x:Name="navCapture" GroupName="navigation" Content="采集设置" Tag="4" Checked="Nav_Checked" Style="{StaticResource NavigationItem}"/>
+    </StackPanel>
+   </DockPanel>
+  </Border>
+  <Grid Grid.Column="1" Margin="28,26,20,14">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid Margin="0,0,8,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="pageTitle" Text="趋势总览" FontSize="28" FontWeight="SemiBold"/><TextBlock x:Name="pageSubtitle" Text="看交接习惯的变化，再决定是否调参数" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0"/></StackPanel><Button Grid.Column="1" x:Name="captureBadge" Content="查看采集状态" Click="CaptureBadge_Click" VerticalAlignment="Top" FontSize="12" Padding="12,7" Margin="8,4,0,0"/></Grid>
+  <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0" x:Name="tabs"><TabControl.Template><ControlTemplate TargetType="TabControl"><ContentPresenter ContentSource="SelectedContent"/></ControlTemplate></TabControl.Template>
+   <TabItem x:Name="progressTab" Header="进步与键盘参数"><local:ProgressPage x:Name="progressPage"/></TabItem>
+   <TabItem x:Name="detailTab" Header="对局与动作明细">
+    <ScrollViewer x:Name="statsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+     <StackPanel Margin="0,16,10,16">
+      <WrapPanel>
+       <ComboBox x:Name="dateFilter" Width="112" SelectionChanged="Filter_Changed"/>
+       <ComboBox x:Name="mapFilter" Width="150" SelectionChanged="Filter_Changed"/>
+       <ComboBox x:Name="weaponFilter" Width="145" SelectionChanged="Filter_Changed"/>
+       <ComboBox x:Name="sessionFilter" Width="246" SelectionChanged="Filter_Changed" SelectedValuePath="Id"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+      </WrapPanel>
+      <WrapPanel><ComboBox x:Name="stanceFilter" Width="145" SelectionChanged="Filter_Changed"/><ComboBox x:Name="speedFilter" Width="150" SelectionChanged="Filter_Changed"/></WrapPanel>
+      <TextBlock x:Name="cohortText" Foreground="#9EAFAE" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,13"/>
+      <UniformGrid Columns="4" Margin="0,0,0,16">
+       <Border Style="{StaticResource CardStyle}" Margin="0,0,8,0"><StackPanel><TextBlock Text="能用于统计的动作" FontSize="11" Foreground="#9EAFAE"/><TextBlock x:Name="sampleCount" Text="—" FontSize="30" FontWeight="SemiBold" Margin="0,8,0,3"/><TextBlock Text="已核对录像 · 包含慢走 / 蹲伏" FontSize="10" Foreground="#9EAFAE" TextWrapping="Wrap"/></StackPanel></Border>
+       <Border Style="{StaticResource CardStyle}" Margin="0,0,8,0"><StackPanel><TextBlock Text="记录到的换向开枪" FontSize="11" Foreground="#9EAFAE"/><TextBlock x:Name="lowRate" Text="—" FontSize="30" FontWeight="SemiBold" Foreground="#74D6BA" Margin="0,8,0,3"/><TextBlock x:Name="lowDetail" Text="等待可靠匹配" FontSize="10" Foreground="#9EAFAE" TextWrapping="Wrap"/></StackPanel></Border>
+       <Border Style="{StaticResource CardStyle}" Margin="0,0,8,0"><StackPanel><TextBlock Text="两键同按 · 典型时长" FontSize="11" Foreground="#9EAFAE"/><TextBlock x:Name="overlapMedian" Text="—" FontSize="27" FontWeight="SemiBold" Margin="0,8,0,3"/><TextBlock x:Name="gapMedian" Text="双键空档 —" FontSize="10" Foreground="#9EAFAE"/></StackPanel></Border>
+       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="换向后多久开枪" FontSize="11" Foreground="#9EAFAE"/><TextBlock x:Name="timingMedian" Text="—" FontSize="27" FontWeight="SemiBold" Margin="0,8,0,3"/><TextBlock Text="典型时长 · 不是建议等待时间" FontSize="10" Foreground="#9EAFAE" TextWrapping="Wrap"/></StackPanel></Border>
+      </UniformGrid>
+      <Expander Header="查看未计入原因" Foreground="#A5BCD6" Margin="0,0,0,14"><TextBlock x:Name="exclusionText" FontSize="11" TextWrapping="Wrap" Margin="0,9,0,0"/></Expander>
+      <TextBlock Text="逐局记录 · 点击一局查看动作" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,9"/>
+      <DataGrid x:Name="matchGrid" Height="175" SelectionChanged="Match_Selected" Margin="0,0,0,16">
+       <DataGrid.Columns><DataGridTextColumn Header="本地时间" Binding="{Binding LocalTime}" Width="110"/><DataGridTextColumn Header="地图" Binding="{Binding Map}" Width="*"/><DataGridTextColumn Header="候选动作" Binding="{Binding Count}" Width="80"/><DataGridTextColumn Header="可评估" Binding="{Binding EligibleCount}" Width="80"/><DataGridTextColumn Header="Demo" Binding="{Binding DemoStatus}" Width="*"/><DataGridTextColumn Header="同步残差 ms" Binding="{Binding Alignment.ResidualRmsMs,StringFormat=F1,TargetNullValue=—}" Width="115"/></DataGrid.Columns>
+      </DataGrid>
+      <DockPanel Margin="0,0,0,8"><Button DockPanel.Dock="Right" Content="导出当前筛选 CSV" Click="Export_Click"/><TextBlock Text="动作明细" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
+      <ComboBox x:Name="cohortFilter" Width="215" HorizontalAlignment="Left" SelectionChanged="Filter_Changed"/><DataGrid x:Name="actionGrid" Height="260" SelectionChanged="Action_Selected">
+       <DataGrid.Columns><DataGridTextColumn Header="时间" Binding="{Binding TimeText}" Width="105"/><DataGridTextColumn Header="回合" Binding="{Binding RoundText}" Width="45"/><DataGridTextColumn Header="方向" Binding="{Binding Direction}" Width="55"/><DataGridTextColumn Header="武器" Binding="{Binding Weapon}" Width="90"/><DataGridTextColumn Header="Gap ms" Binding="{Binding GapMs,StringFormat=F1,TargetNullValue=—}" Width="65"/><DataGridTextColumn Header="Overlap" Binding="{Binding OverlapMs,StringFormat=F1,TargetNullValue=—}" Width="68"/><DataGridTextColumn Header="首击 ms" Binding="{Binding ClickMs,StringFormat=F1}" Width="68"/><DataGridTextColumn Header="u/s" Binding="{Binding Speed,StringFormat=F1,TargetNullValue=—}" Width="60"/><DataGridTextColumn Header="速度变化" Binding="{Binding BrakeDescription}" Width="110"/><DataGridTextColumn Header="统计分组" Binding="{Binding Cohort}" Width="135"/><DataGridTextColumn Header="计入 / 原因" Binding="{Binding EligibilityText}" Width="230"/></DataGrid.Columns>
+      </DataGrid>
+      <Border Style="{StaticResource CardStyle}" Margin="0,12,0,12"><StackPanel><TextBlock x:Name="actionStory" FontSize="14" Foreground="#D2E2EF" TextWrapping="Wrap"/><local:InputTimeline x:Name="inputTimeline" Height="165" Margin="0,8,0,0"/><Expander Header="展开原始速度、时间匹配和排除原因" Foreground="#A5BCD6"><TextBlock x:Name="actionDetail" Margin="0,10,0,12" Foreground="#A5BCD6" TextWrapping="Wrap"/></Expander></StackPanel></Border>
+      <Expander Header="按武器、姿态与方向展开比较" Margin="0,8,0,16" Foreground="{StaticResource MutedBrush}"><StackPanel Margin="0,12,0,0">
+      <TextBlock Text="同类动作比较 · 蹲姿和慢走同样保留" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8"/>
+      <TextBlock Text="按武器 × 姿态 × 起速分组；轴向降速 = 原方向分量 − 开枪时该轴速度大小，负值表示更快。它包含摩擦、蹲起或受击等共同影响，不等于射击精度，也不是按键制动的独立贡献。" FontSize="11" Foreground="#9EAFAE" TextWrapping="Wrap" Margin="0,0,0,8"/>
+      <DataGrid x:Name="groupGrid" Height="185" Margin="0,0,0,16"><DataGrid.Columns>
+       <DataGridTextColumn Header="武器" Binding="{Binding Weapon}" Width="105"/><DataGridTextColumn Header="姿态" Binding="{Binding Stance}" Width="95"/><DataGridTextColumn Header="起速 u/s" Binding="{Binding InitialSpeedBand}" Width="115"/><DataGridTextColumn Header="样本" Binding="{Binding Count}" Width="55"/>
+       <DataGridTextColumn Header="起速中位数" Binding="{Binding Before,StringFormat=F1,TargetNullValue=—}" Width="*"/><DataGridTextColumn Header="开枪速度" Binding="{Binding AtShot,StringFormat=F1,TargetNullValue=—}" Width="*"/><DataGridTextColumn Header="轴向降速 u/s" Binding="{Binding AxisDrop,StringFormat=F1,TargetNullValue=—}" Width="*"/>
+      </DataGrid.Columns></DataGrid>
+      <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+       <StackPanel><TextBlock Text="对局趋势" FontSize="15" FontWeight="SemiBold"/><TextBlock x:Name="trendText" Foreground="#9EAFAE" FontSize="11" Margin="0,5,0,5" TextWrapping="Wrap"/><local:AnalysisTrendChart x:Name="trendChart" Height="144"/>
+       <TextBlock Text="绿色：可评估动作数　蓝色：Overlap 中位数（ms）　旧 → 新；未匹配 Demo 不绘制动作数点" Foreground="#9EAFAE" FontSize="10" TextWrapping="Wrap"/></StackPanel>
+      </Border>
+      <TextBlock Text="方向对比" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,9"/>
+      <DataGrid x:Name="directionGrid" Height="153" Margin="0,0,0,16">
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="方向" Binding="{Binding Direction}" Width="*"/><DataGridTextColumn Header="样本" Binding="{Binding Count}" Width="65"/>
+        <DataGridTextColumn Header="Gap ms" Binding="{Binding Gap}" Width="*"/><DataGridTextColumn Header="Overlap ms" Binding="{Binding Overlap}" Width="*"/>
+        <DataGridTextColumn Header="持键 ms" Binding="{Binding Hold}" Width="*"/><DataGridTextColumn Header="首击 ms" Binding="{Binding Click}" Width="*"/><DataGridTextColumn Header="轴向降速 u/s" Binding="{Binding Drop}" Width="115"/>
+       </DataGrid.Columns>
+      </DataGrid>
+      </StackPanel></Expander>
+      <Border Background="#20282D" Padding="13" CornerRadius="8"><TextBlock Text="统计口径 v4：反向前三 tick 的水平速度中位数低于 34 u/s 不计入，等于 34 保留；按未四舍五入值判断。慢走、蹲伏、蹲起不直接排除，按武器与姿态分组。仍需可信反向输入、原方向运动分量和连续 Demo。排除样本保留明细，不算成功或失败。34 是初速统计门槛；开枪速度和轴向减速另行展示，不代表全枪械统一精度或成功率。" FontSize="11" Foreground="#9CB2CD" TextWrapping="Wrap"/></Border>
+     </StackPanel>
+    </ScrollViewer>
+   </TabItem>
+   <TabItem x:Name="jobsTab" Header="Demo 后台任务">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,16,10,16">
+     <Border Style="{StaticResource CardStyle}"><StackPanel>
+      <TextBlock Text="你下载录像，StrafeLab 自动复盘" FontSize="18" FontWeight="SemiBold"/>
+      <TextBlock Text="支持 .dem / .zip / .dem.bz2。开启后台采集后，即使关闭统计窗口也会自动扫描；游戏运行时等待，退出后继续分析。文件稳定后再排队解析。" TextWrapping="Wrap" Foreground="#9EAFAE" Margin="0,8,0,12"/>
+      <WrapPanel><Button Content="导入 Demo / 压缩包" Click="Import_Click" Margin="0,0,10,8"/><Button Content="立即扫描" Click="Scan_Click" Margin="0,0,10,8"/><Button Content="重试失败 / 未匹配" Click="Retry_Click" Margin="0,0,10,8"/><CheckBox x:Name="enabledBox" Content="自动后台分析" Foreground="#DBE7F5" VerticalAlignment="Center" Checked="Enabled_Changed" Unchecked="Enabled_Changed"/></WrapPanel>
+     </StackPanel></Border>
+     <DockPanel Margin="0,18,0,8"><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="添加目录" Click="AddRoot_Click" Margin="0,0,8,0"/><Button Content="移除所选" Click="RemoveRoot_Click" Margin="0"/></StackPanel><TextBlock Text="监控目录" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
+     <ListBox x:Name="rootList" Height="145" Background="#1B2125" Foreground="#B7CEE7" BorderBrush="#30393F" Padding="8"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap" Margin="3,5"/></DataTemplate></ListBox.ItemTemplate></ListBox>
+     <TextBlock Text="下载位置不固定时，添加其所在目录即可；手动导入不受监控目录限制。平台账号内的录像仍需你先下载。" Foreground="#9EAFAE" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,16"/>
+     <DataGrid x:Name="jobGrid" Height="250" SelectionChanged="Job_Selected"><DataGrid.Columns><DataGridTextColumn Header="文件" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="状态" Binding="{Binding State}" Width="105"/><DataGridTextColumn Header="尝试次数" Binding="{Binding Attempts}" Width="75"/><DataGridTextColumn Header="本地更新时间" Binding="{Binding UpdatedLocal}" Width="135"/></DataGrid.Columns></DataGrid>
+     <TextBlock x:Name="jobDetail" Foreground="#B7CEE7" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </StackPanel></ScrollViewer>
+   </TabItem>
+   <TabItem x:Name="captureTab"><local:CapturePage x:Name="capturePage"/></TabItem>
+  </TabControl>
+   <TextBlock Grid.Row="2" x:Name="backgroundStatus" Text="读取本地报告…" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,10,8,0" TextTrimming="CharacterEllipsis"/>
+  </Grid>
+ </Grid>
+</UserControl>

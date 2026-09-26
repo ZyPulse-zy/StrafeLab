@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,13 +6,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.0</Version>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Version>1.5.0</Version>
     <ApplicationIcon>Assets\StrafeLab.ico</ApplicationIcon>
     <Product>StrafeLab</Product>
     <Description>Local CS2 manual movement analysis</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="HidSharp" Version="2.1.0" />
   </ItemGroup>

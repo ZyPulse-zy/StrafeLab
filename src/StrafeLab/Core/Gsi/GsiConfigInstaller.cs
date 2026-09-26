@@ -30,6 +30,7 @@ public sealed class GsiConfigInstaller
             var path = Path.Combine(directory, FileName);
             var temp = path + ".tmp";
             var backup = path + ".bak";
+            if(File.Exists(path)&&File.ReadAllText(path)==BuildConfig(port,token)){written.Add(path);continue;}
             if (File.Exists(path))
             {
                 try { File.Copy(path, backup, overwrite: true); } catch { }

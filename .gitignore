@@ -2,6 +2,7 @@
 **/obj/
 work/
 outputs/
+incoming/
 .playwright-cli/
 **/__pycache__/
 *.user
@@ -28,3 +29,12 @@ gamestate_integration_strafelab.cfg
 *.pfx
 *.p12
 *.key
+
+# Local analysis and unpacked demo cache
+**/demo-cache/
+**/analysis/
+demo-library.json
+keyboard-profiles.json
+collector-status.json
+collector-settings.json
+startup-backup-*.json

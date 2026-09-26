@@ -11,12 +11,13 @@ public sealed class StrafeAnalyzer
     private readonly HashSet<InputControl> _down = [];
     private readonly Dictionary<InputControl, long> _lastUp = [];
     private readonly List<StrafeTransition> _transitions;
+    private int _segmentStart;
     public StrafeAnalyzer(List<StrafeTransition> transitions) => _transitions = transitions;
     public InputSnapshot Snapshot => new() {W=_down.Contains(InputControl.W),A=_down.Contains(InputControl.A),
         S=_down.Contains(InputControl.S),D=_down.Contains(InputControl.D),Walk=_down.Contains(InputControl.Walk),
         Crouch=_down.Contains(InputControl.Crouch),Jump=_down.Contains(InputControl.Jump)};
     public bool IsHeld(InputControl control)=>_down.Contains(control);
-    public void Reset() { _down.Clear(); _lastUp.Clear(); foreach(var t in _transitions.Where(t=>t.OverlapPending)) {t.OverlapPending=false;t.OverlapUs=null;} }
+    public void Reset() { _segmentStart=_transitions.Count; _down.Clear(); _lastUp.Clear(); foreach(var t in _transitions.Where(t=>t.OverlapPending)) {t.OverlapPending=false;t.OverlapUs=null;} }
     public AnalyzerUpdate Process(InputEvent input, GsiSnapshot? gsi, PhysicsState? physics)
     {
         if (input.Action == InputAction.Analog || (input.Action == InputAction.Down) == _down.Contains(input.Control))
@@ -26,7 +27,7 @@ public sealed class StrafeAnalyzer
         if (input.Control == InputControl.Mouse1)
         {
             if (!pressed) return new() {Snapshot=Snapshot};
-            var t = _transitions.LastOrDefault(t => input.TimestampUs >= t.TimestampUs && input.TimestampUs - t.TimestampUs <= 500_000);
+            var t = _transitions.Skip(_segmentStart).LastOrDefault(t => input.TimestampUs >= t.TimestampUs && input.TimestampUs - t.TimestampUs <= 500_000);
             long? delta = t == null ? null : input.TimestampUs - t.TimestampUs;
             if (t != null) t.ShotDeltaUs ??= delta;
             return new() {Snapshot=Snapshot, Shot=new() {TimestampUs=input.TimestampUs,Confidence=input.Confidence,
@@ -38,7 +39,7 @@ public sealed class StrafeAnalyzer
         if (!pressed)
         {
             _lastUp[input.Control]=input.TimestampUs;
-            foreach (var t in _transitions.AsEnumerable().Reverse().Take(12))
+            foreach (var t in _transitions.Skip(_segmentStart).Reverse())
             {
                 if (t.TimestampUs > input.TimestampUs) continue;
                 if (t.To == input.Control && t.TargetHoldUs == null)

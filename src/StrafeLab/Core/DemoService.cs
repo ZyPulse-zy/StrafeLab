@@ -95,6 +95,8 @@ public sealed class DemoService
             {
                 start.ArgumentList.Add(argument);
             }
+            start.Environment["RAYON_NUM_THREADS"]="2";
+            start.Environment["POLARS_MAX_THREADS"]="2";
             start.ArgumentList.Add("--input");
             start.ArgumentList.Add(path);
             if (!string.IsNullOrWhiteSpace(steamId))
@@ -114,6 +116,7 @@ public sealed class DemoService
 
             using var process = Process.Start(start);
             if (process is null) throw new InvalidOperationException("无法启动 Demo 提取器。");
+            try {process.PriorityClass=ProcessPriorityClass.BelowNormal;} catch { }
             using var processLease=new ProcessLease(process);
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
@@ -166,6 +169,21 @@ public sealed class DemoService
 
     public static AlignmentResult Align(SessionDocument session, DemoParseResult demo) => RobustDemoAnalysis.Align(session,demo);
     public static CalibrationResult Calibrate(SessionDocument session, DemoParseResult demo, AlignmentResult alignment) => RobustDemoAnalysis.Calibrate(session,demo,alignment);
+
+    public static async Task UnpackBzipAsync(string source,string destination,CancellationToken ct)
+    {
+        var helper=FindExtractor()??throw new IOException("缺少本地 Python 解压器");
+        var start=new ProcessStartInfo(helper.Executable){UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true};
+        foreach(var arg in helper.PrefixArguments)start.ArgumentList.Add(arg);
+        foreach(var arg in new[]{"--input",source,"--unpack-bz2","--output",destination})start.ArgumentList.Add(arg);
+        using var process=Process.Start(start)??throw new IOException("无法启动解压器");
+        using var lease=new ProcessLease(process);
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        using var kill=timeout.Token.Register(()=>{try{process.Kill(true);}catch{}});
+        var error=process.StandardError.ReadToEndAsync(timeout.Token);
+        await process.WaitForExitAsync(timeout.Token);
+        if(process.ExitCode!=0)throw new IOException(await error);
+    }
 
     private static DemoExtractorSpec? FindExtractor()
     {
@@ -312,7 +330,6 @@ public static class DemoScoring
         if (ageHours <= 2) score += 50;
         else if (ageHours <= 12) score += 25;
         else if (ageHours <= 48) score += 5;
-        if(ageHours>48)return -100;
         if(session.Map!=null && header.MapHint!=null && session.Map!=header.MapHint)return -100;
         if (info.Length > 1_000_000) score += 10;
         return score;

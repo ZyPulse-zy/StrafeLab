@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = "outputs\StrafeLab")
+﻿param([string]$OutputDirectory = "outputs\StrafeLab")
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $taskRoot
@@ -14,10 +14,11 @@ try {
         Copy-Item -Path (Join-Path $taskSource '*') -Destination $taskDestination -Recurse -Force
     }
     "python312.zip`n.`n..\demo-runtime`nimport site`n" | Set-Content -Encoding ascii -LiteralPath (Join-Path $taskOutput 'demo-python\python312._pth')
-    foreach ($taskDoc in @('README.md','RESEARCH.md','VERIFICATION.md','THIRD-PARTY-NOTICES.md','LICENSE')) {
+    foreach ($taskDoc in @('KNOWN-ISSUES.md','README.md','RESEARCH.md','VERIFICATION.md','THIRD-PARTY-NOTICES.md','LICENSE')) {
         if(Test-Path $taskDoc){Copy-Item -LiteralPath $taskDoc -Destination $taskOutput -Force}
     }
     Copy-Item -LiteralPath tools\demo-extractor.py -Destination $taskOutput -Force
+    Copy-Item -LiteralPath tools\start-analysis.cmd -Destination (Join-Path $taskOutput 'Start-Analysis.cmd') -Force
     foreach ($taskFolder in @('licenses','evidence')) {
         if (Test-Path -LiteralPath $taskFolder) {
             $taskFolderOutput = Join-Path $taskOutput $taskFolder

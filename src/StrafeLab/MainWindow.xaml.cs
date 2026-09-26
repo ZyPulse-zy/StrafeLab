@@ -45,6 +45,13 @@ public partial class MainWindow : Window
                 var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);
                 bitmap.Render(this);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
                 using(var file=File.Create(Path.Combine(_runtime.DataDirectory,"ui-preview.png")))encoder.Save(file);
+                History_Click(this,new RoutedEventArgs());
+                await ((AnalysisPage)analysisHost.Content).RefreshAsync();
+                await Task.Delay(400);UpdateLayout();
+                var statsBitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);
+                statsBitmap.Render(this);var statsEncoder=new System.Windows.Media.Imaging.PngBitmapEncoder();statsEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(statsBitmap));
+                using(var statsFile=File.Create(Path.Combine(_runtime.DataDirectory,"analysis-preview.png")))statsEncoder.Save(statsFile);
+                await ((AnalysisPage)analysisHost.Content).CaptureExtraSmokeViewsAsync(_runtime.DataDirectory);
                 File.WriteAllText(Path.Combine(_runtime.DataDirectory,"smoke.json"),JsonSerializer.Serialize(new{initialized=true,gsiPort=_runtime.GsiPort,width=ActualWidth,height=ActualHeight}));
                 Close();
             }
@@ -90,7 +97,7 @@ public partial class MainWindow : Window
         shotSpeedText.Text = metrics.ModelShotCount==0?"—":$"{metrics.AverageSpeedAtShot:F0} u/s";
         shotDeltaText.Text = $"timing {metrics.AverageShotDeltaMs:F1} ms";
         sampleText.Text = $"{metrics.TransitionCount}";
-        windowText.Text = metrics.ModelShotCount==0?"低移速估计 · 等待模型样本":$"低移速 {metrics.FireWindowRate:P0} · {metrics.ModelShotCount} 样本";
+        windowText.Text = metrics.ModelShotCount==0?"模型参考 · 急停统计见分析页":$"模型低速 {metrics.FireWindowRate:P0} · 非急停评分";
         speedNowText.Text = $"{metrics.CurrentSpeed:F0} u/s";
         qualityText.Text = metrics.TransitionCount==0?"—":$"{metrics.ConfidenceRate:P0}";
         transitionCountText.Text = $"{metrics.TransitionCount} events · {metrics.ShotCount} shots";
@@ -150,7 +157,15 @@ public partial class MainWindow : Window
         catch (Exception ex) { saveStatusText.Text = ex.Message; }
     }
 
-    private void History_Click(object sender,RoutedEventArgs e) => new HistoryWindow(_runtime){Owner=this}.Show();
+    private void History_Click(object sender,RoutedEventArgs e)
+    {
+        analysisHost.Content ??= new AnalysisPage(_runtime.DemoMonitor);
+        realtimePage.Visibility=Visibility.Collapsed;analysisHost.Visibility=Visibility.Visible;
+        analysisNav.Background=new SolidColorBrush(Color.FromRgb(25,49,78));realtimeNav.Background=new SolidColorBrush(Color.FromRgb(22,36,58));
+    }
+    private void Realtime_Click(object sender,RoutedEventArgs e)
+    {realtimePage.Visibility=Visibility.Visible;analysisHost.Visibility=Visibility.Collapsed;
+        realtimeNav.Background=new SolidColorBrush(Color.FromRgb(25,49,78));analysisNav.Background=new SolidColorBrush(Color.FromRgb(22,36,58));}
     private void Feedback_Click(object sender,RoutedEventArgs e)
     {
         MessageBox.Show(this,"训练时观察上方 WASD 键程及 gap/overlap。低移速窗口只估算移动误差，不代表后坐力已恢复。灯光反馈尚未针对当前固件验证，未启用。","训练提示");

@@ -283,7 +283,7 @@ public sealed class SessionSummary
     public int ShotCount { get; init; }
     public double AverageGapMs { get; init; }
     public double AverageOverlapMs { get; init; }
-    public double FireWindowRate { get; init; }
+    public double? FireWindowRate { get; init; }
     public double ConfidenceRate { get; init; }
 }
 

@@ -9,6 +9,8 @@ optional and local. No game process, memory, or network service is touched.
 from __future__ import annotations
 
 import argparse
+import bz2
+import statistics
 import json
 import math
 import sys
@@ -149,7 +151,7 @@ def event_observations(parser: Any, event_name: str, steam_id: str | None, tickr
     return count
 
 
-def tick_observations(parser: Any, steam_id: str | None, tickrate: float, sample_every: int) -> tuple[int, int]:
+def read_ticks(parser: Any, steam_id: str | None):
     wanted = [
         "X",
         "Y",
@@ -179,10 +181,37 @@ def tick_observations(parser: Any, steam_id: str | None, tickrate: float, sample
         except Exception as second_error:
             raise RuntimeError(f"parse_ticks failed: {first_error}; fallback failed: {second_error}") from second_error
 
-    try:
-        rows = frame.to_dict("records")
-    except Exception:
-        rows = [row_dict(row) for row in frame]
+    return frame
+
+
+def prepare_velocities(frame):
+    """Timestamp velocity at the END of its actual position interval.
+
+    demoparser2 0.42 velocity aliases read previous position history; do not
+    silently label that one-tick-old value as speed at the current tick.
+    """
+    import numpy as np
+    frame = frame.sort_values(["steamid", "tick"]).copy()
+    if "game_time" not in frame:
+        raise RuntimeError("game_time unavailable; cannot verify Demo clock")
+    groups = frame.groupby("steamid", sort=False)
+    dt = groups["game_time"].diff()
+    ticks = groups["tick"].diff()
+    ratios = (ticks / dt).replace([np.inf, -np.inf], np.nan)
+    valid = ratios[(dt > 0) & (ticks > 0)].dropna()
+    if len(valid) < 32:
+        raise RuntimeError("Not enough samples to verify Demo clock/player identity")
+    rate = float(valid.median())
+    if not 30 <= rate <= 256 or float((abs(valid-rate) < rate*.002).mean()) < .98:
+        raise RuntimeError("Demo clock is irregular; synchronization rejected")
+    for axis in ("X", "Y", "Z"):
+        delta = groups[axis].diff()
+        frame["velocity_"+axis] = (delta/dt).where((ticks == 1) & (dt > 0) & (dt < .04))
+    return frame, rate
+
+
+def tick_observations(frame: Any, steam_id: str | None, tickrate: float, sample_every: int) -> tuple[int, int]:
+    rows = frame.to_dict("records")
 
     emitted = 0
     max_tick = 0
@@ -232,16 +261,37 @@ def main() -> int:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument("--input", required=True, type=Path)
     argument_parser.add_argument("--steamid")
-    argument_parser.add_argument("--tickrate", type=float, default=DEFAULT_TICKRATE)
+    argument_parser.add_argument("--tickrate", type=float, help="Optional assertion against measured tick rate")
+    argument_parser.add_argument("--unpack-bz2", action="store_true")
+    argument_parser.add_argument("--output", type=Path)
     argument_parser.add_argument("--sample-every", type=int, default=1)
     args = argument_parser.parse_args()
 
     if not args.input.is_file():
         print(f"demo not found: {args.input}", file=sys.stderr)
         return 2
-    if args.tickrate <= 0:
-        print("tickrate must be positive", file=sys.stderr)
-        return 2
+    if args.unpack_bz2:
+        if args.output is None:
+            return 2
+        temporary = args.output.with_suffix(".tmp")
+        try:
+            total = 0
+            with bz2.open(args.input, "rb") as source, temporary.open("wb") as target:
+                while block := source.read(1024*1024):
+                    total += len(block)
+                    if total > 2_000_000_000:
+                        raise RuntimeError("Decompressed Demo exceeds 2 GB")
+                    target.write(block)
+            with temporary.open("rb") as check:
+                if check.read(8) != b"PBDEMS2\0":
+                    raise RuntimeError("Not a Source 2 Demo")
+            temporary.replace(args.output)
+            return 0
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 4
+        finally:
+            temporary.unlink(missing_ok=True)
 
     try:
         from demoparser2 import DemoParser
@@ -254,6 +304,14 @@ def main() -> int:
         parser = DemoParser(str(args.input))
         header = parser.parse_header()
         map_name = header.get("map_name") if isinstance(header, Mapping) else None
+        raw_frame = read_ticks(parser, args.steamid)
+        if len(raw_frame) == 0:
+            emit({"kind":"meta","map":map_name,"tick":0,"time_seconds":0})
+            print("Requested player absent; no alignment possible", file=sys.stderr)
+            return 0
+        frame, tickrate = prepare_velocities(raw_frame)
+        if args.tickrate and abs(args.tickrate-tickrate) > .01:
+            raise RuntimeError("Requested tick rate differs from measured Demo clock")
         emit(
             {
                 "tick": 0,
@@ -261,7 +319,7 @@ def main() -> int:
                 "kind": "meta",
                 "event_name": None,
                 "map": map_name,
-                "tick_rate": args.tickrate,
+                "tick_rate": tickrate,
             }
         )
 
@@ -269,12 +327,12 @@ def main() -> int:
         event_count = 0
         for event_name in EVENTS:
             if event_name in available_events:
-                event_count += event_observations(parser, event_name, args.steamid, args.tickrate)
+                event_count += event_observations(parser, event_name, args.steamid, tickrate)
 
         sample_count, max_tick = tick_observations(
-            parser,
+            frame,
             args.steamid,
-            args.tickrate,
+            tickrate,
             max(1, args.sample_every),
         )
         print(
@@ -286,11 +344,11 @@ def main() -> int:
         emit(
             {
                 "tick": max_tick,
-                "time_seconds": max_tick / args.tickrate,
+                "time_seconds": max_tick / tickrate,
                 "kind": "meta_end",
                 "event_name": None,
                 "map": map_name,
-                "tick_rate": args.tickrate,
+                "tick_rate": tickrate,
             }
         )
         return 0

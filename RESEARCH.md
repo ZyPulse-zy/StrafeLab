@@ -73,3 +73,22 @@
 - [Valve GSI 文档](https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Game_State_Integration)、[CS2GSI C# 项目](https://github.com/antonpup/CounterStrike2GSI)：GSI 用作比赛上下文，不冒充速度传感器。
 
 灯光仍未验证，默认无灯光写入。完整移动引擎状态无法只靠普通 GSI 取得；模型限制、同步/校准门槛见 README。
+
+
+## 2026-09-26：统计 UI、同类项目与后台运行（1.5）
+
+本轮读取开源源码，借鉴信息组织与分析思路，没有复制其应用代码，也没有执行其中的安装器或输入钩子。
+
+| 项目 / 固定源码 | 核对结果 | StrafeLab 的取舍 |
+| --- | --- | --- |
+| [CS2StopReflex](https://github.com/PuddingTower/CS2StopReflex/tree/9bd669dc0572a6384b0e5323adfc0cf9888f520d) | A/D 按下与松开时差、近 50 次折线与箱线图、基于均值的参数建议 | 参考顺序分布与波动展示；保留同武器 / 姿态 / 初速分组和中位数，未把按键交接当成角色完全停住 |
+| [CounterStrafeTestTools / StrafeLogic.cs](https://github.com/LolitaIceMia/CounterStrafeTestTools/blob/59e756538c4dc5a883ebb8dbe772ed5416455a37/CounterStrafeTest/Core/StrafeLogic.cs) | C# 按键边沿状态机，200 ms 时差筛选；StopTick 是按键交接结束时刻 | 不以其固定阈值替代 Demo 速度、输入连续性与置信度检查；符号口径不同，未混用 |
+| [MagnetDebugLogic.cs](https://github.com/LolitaIceMia/CounterStrafeTestTools/blob/59e756538c4dc5a883ebb8dbe772ed5416455a37/CounterStrafeTest/Core/MagnetDebugLogic.cs) | 根据均值 ±5 ms、标准差等规则建议改变 RT / 死区 | 这些是启发式规则，未用作 ACE68 参数结论；继续记录真实方案、同类对局对照，不从时差推导最佳毫米数 |
+| [cs-match-helper / player-api.ts](https://github.com/qianjiachun/cs-match-helper/blob/44ca1bd2a81baaaa5bba444b023b0f02a4065df6/src/platforms/perfect/player-api.ts) | rapidStopSuccessRate 从平台返回字段映射；当前 HUD 页面链接至独立站点 | 不能将平台急停率当成本地算法，也不引入平台账号依赖 |
+| [CS Demo Manager / video-queue.ts](https://github.com/akiver/cs-demo-manager/blob/10fc2a92b2824d0705c338295e1080922d96ebfd/src/server/video-queue.ts) 与 [目录扫描](https://github.com/akiver/cs-demo-manager/blob/10fc2a92b2824d0705c338295e1080922d96ebfd/src/node/demo/find-demos-in-folders.ts) | 显式队列状态、取消机制、目录与压缩包去重处理 | 参考任务与采集分离；StrafeLab 使用自己的持久队列、文件租约、下载稳定检查。未采用其游戏服务器插件、录像渲染等功能 |
+| [Awpy](https://github.com/pnxenopoulos/awpy) / [解析文档](https://awpy.readthedocs.io/en/latest/_modules/awpy/demo.html) | 展示按 tick / 回合组织事件并按有效比赛阶段筛选的方法；不同版本后端可能不同 | 参考分层处理，继续使用已在真实 Demo 验证的 demoparser2 0.42.0，不为 UI 重构更换解析后端 |
+| [spicy/strafe-analyzer](https://github.com/spicy/strafe-analyzer) | 已弃用，面向旧 CS:GO / CS:S，使用进程内 DLL | 不符合本项目只观察边界，未采用 |
+
+Windows 自启动使用微软文档中的 [HKCU Run](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)，命令指向固定安装路径并带 `--collector`，不需要管理员。只修改 StrafeLab 自己的值，改动前保存备份。
+
+1.5 分离统计窗口与托盘采集。空闲只检查进程是否存在及文件元数据，不读取 CS2 内存、不注入、不产生按键。游戏开始后启动现有 Raw Input / Hall / GSI；正常退出等待保存并释放录制对象。游戏运行时暂停 Demo 解析；后台扫描以短生命周期进程完成有限批次，结束后释放内存。流式 JSON 写入减少大字符串分配，但录制期间仍保留本局数据，不声称恒定内存。

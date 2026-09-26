@@ -57,12 +57,11 @@ public sealed class SteamLocator
         foreach (var root in new[]
         {
             Path.Combine(home, "Downloads"),
-            Path.Combine(home, "Documents"),
-            Path.Combine(home, "Videos"),
-            Path.Combine(home, "AppData", "Local", "Temp")
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wmpvp", "demo"),
+            Path.Combine(AppContext.BaseDirectory,"incoming")
         })
         {
-            if (Directory.Exists(root)) roots.Add(root);
+            roots.Add(root);
         }
 
         foreach (var library in FindSteamLibraries())
