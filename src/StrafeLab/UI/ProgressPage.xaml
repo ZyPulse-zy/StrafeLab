@@ -1,85 +1,64 @@
-<UserControl x:Class="StrafeLab.UI.ProgressPage"
- xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
- xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- xmlns:local="clr-namespace:StrafeLab.UI">
- <UserControl.Resources>
-  <Style TargetType="TextBox"><Setter Property="Background" Value="#161C20"/><Setter Property="Foreground" Value="#E4EDF7"/><Setter Property="BorderBrush" Value="#3B4C4D"/><Setter Property="Padding" Value="9,7"/><Setter Property="Margin" Value="0,5,12,8"/><Setter Property="MinWidth" Value="85"/></Style>
-  <Style TargetType="Expander"><Setter Property="Foreground" Value="#C1D3E5"/><Setter Property="Margin" Value="0,12,0,4"/></Style>
- </UserControl.Resources>
+<UserControl x:Class="StrafeLab.UI.ProgressPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:StrafeLab.UI">
+ <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ReviewTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+ <UserControl.FontFamily><StaticResource ResourceKey="MonoFont"/></UserControl.FontFamily>
  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
- <StackPanel Margin="0,0,12,0">  <WrapPanel>
-   <StackPanel><TextBlock Text="观察多久" FontSize="11" Foreground="#9EAFAE" Margin="0,0,0,5"/><ComboBox x:Name="period" Width="118" SelectionChanged="Period_Changed"/></StackPanel>
-   <StackPanel><TextBlock Text="只比较同一种武器、姿态和初速" FontSize="11" Foreground="#9EAFAE" Margin="0,0,0,5"/><ComboBox x:Name="cohort" Width="365" SelectedValuePath="Key" SelectionChanged="Cohort_Changed"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox></StackPanel>
-  </WrapPanel>
-  <TextBlock x:Name="selectionNote" FontSize="11" Foreground="#9EAFAE" TextWrapping="Wrap" Margin="0,0,0,12"/>
-</StackPanel>
- <ScrollViewer Grid.Row="1" x:Name="progressScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-  <StackPanel Margin="0,6,12,20"><StackPanel x:Name="overviewPanel">  <Border Background="Transparent" BorderBrush="#30393F" BorderThickness="0,1,0,1" Padding="0,16" Margin="0,0,0,14">
-   <StackPanel>
-    
-    <TextBlock x:Name="headline" Text="先建立基线，再调整键盘" FontSize="22" FontWeight="SemiBold" Margin="0,7,0,7" TextWrapping="Wrap"/>
-    <TextBlock x:Name="coverage" Foreground="#B2C9DA" FontSize="13" TextWrapping="Wrap"/>
-    <TextBlock x:Name="nextStep" Foreground="#E4CF9D" FontSize="13" TextWrapping="Wrap" Margin="0,9,0,0"/>
+  <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,6" Margin="0,0,12,0"><DockPanel>
+   <TextBlock x:Name="selectionNote" DockPanel.Dock="Right" Style="{StaticResource Caption}" Width="235" VerticalAlignment="Center" Margin="18,0,0,5"/>
+   <WrapPanel><StackPanel><TextBlock Text="时间范围" Style="{StaticResource Caption}" Margin="0,0,0,5"/><ComboBox x:Name="period" Width="130" SelectionChanged="Period_Changed" AutomationProperties.Name="趋势时间范围"/></StackPanel><StackPanel><TextBlock Text="比较同类动作" Style="{StaticResource Caption}" Margin="0,0,0,5"/><Grid><ComboBox x:Name="cohort" Width="360" SelectedValuePath="Key" SelectionChanged="Cohort_Changed" AutomationProperties.Name="武器、姿态与初速分组"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><TextBlock x:Name="cohortPlaceholder" Text="暂无可比较的分组" Style="{StaticResource Caption}" Margin="12,0,40,8" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed"/></Grid></StackPanel></WrapPanel>
+  </DockPanel></Border>
+  <ScrollViewer Grid.Row="1" x:Name="progressScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="0,0,12,24">
+   <StackPanel x:Name="overviewPanel">
+    <Border x:Name="emptyPanel" Visibility="Collapsed" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2,0,0,0" Background="{StaticResource PanelBrush2}" Padding="18" Margin="0,16,0,0"><StackPanel><TextBlock x:Name="emptyTitle" Text="先留下一局记录" Style="{StaticResource SectionTitle}"/><TextBlock x:Name="emptyMessage" Style="{StaticResource Caption}" Margin="0,8,0,14"/><WrapPanel><Button Content="导入对应 Demo" Click="Demo_Click" Style="{StaticResource PrimaryButton}" Margin="0,0,12,0"/><Button Content="检查后台采集" Click="Capture_Click"/></WrapPanel></StackPanel></Border>
+    <Grid x:Name="trendLayout" SizeChanged="TrendLayout_Changed" Margin="0,0,0,0"><Grid.ColumnDefinitions><ColumnDefinition x:Name="readoutColumn" Width="272"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <Border x:Name="readoutSurface" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Padding="0,18,24,12">
+      <StackPanel><TextBlock Text="交接波动" FontSize="20" FontWeight="SemiBold"/>
+       <Grid Height="90" Margin="-4,1,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="handoffSpread" Text="—" FontSize="76" FontWeight="SemiBold" LineHeight="90" VerticalAlignment="Center" ToolTip="当前分组中间 50% 动作的跨度；少于两次完整交接时不计算波动。"/><TextBlock Grid.Column="1" Text="ms" Foreground="{StaticResource MutedBrush}" FontSize="20" Margin="6,43,0,0"/></Grid>
+       <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,1" Padding="0,8" Margin="0,5,0,10"><StackPanel><DockPanel><TextBlock DockPanel.Dock="Right" Text="− 空档 / + 同按" FontSize="10" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="交接中位数" Style="{StaticResource Caption}"/></DockPanel><StackPanel Orientation="Horizontal"><TextBlock x:Name="handoffMedian" Text="—" FontSize="29" FontWeight="SemiBold" LineHeight="36"/><TextBlock Text="ms" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="8,11,0,0"/></StackPanel></StackPanel></Border>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="有效动作" Style="{StaticResource Caption}"/><TextBlock x:Name="sampleTotal" Text="0" FontSize="25" FontWeight="SemiBold" LineHeight="33"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="来自对局" Style="{StaticResource Caption}"/><TextBlock x:Name="matchTotal" Text="0" FontSize="25" FontWeight="SemiBold" LineHeight="33"/></StackPanel></Grid>
+       <TextBlock x:Name="coverage" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Border>
+     <Border x:Name="trendSurface" Grid.Column="1" Padding="24,18,0,12"><StackPanel>
+      <DockPanel><ComboBox x:Name="metric" DockPanel.Dock="Right" Width="180" Margin="12,0,0,0" SelectionChanged="Metric_Changed" AutomationProperties.Name="趋势指标"/><TextBlock Text="长期趋势" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/></DockPanel>
+      <TextBlock x:Name="chartDescription" Style="{StaticResource Caption}" Margin="0,8,0,0"/><local:ProgressChart x:Name="chart" Height="210" Margin="0,6,0,0" AutomationProperties.Name="逐局时间趋势" AutomationProperties.HelpText="左右方向键选择对局，Enter 打开对应动作。也可使用下方逐局记录。"/>
+      <TextBlock x:Name="chartLegend" Text="折线：中位数 · 色带：中间 50% · 空心点：少于 5 次" Style="{StaticResource Caption}" Margin="0,5,0,0"/>
+     </StackPanel></Border>
+    </Grid>
+    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,1" Padding="0,15"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,24,0"><TextBlock x:Name="headline" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/><TextBlock x:Name="trendSummary" Style="{StaticResource Caption}" Margin="0,5,0,0"/></StackPanel><Button Grid.Column="1" x:Name="openLatest" Content="核对最近一局" Click="Latest_Click" VerticalAlignment="Center" Padding="12,7"/></Grid></Border>
+    <Grid Margin="0,18,0,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="320"/></Grid.ColumnDefinitions>
+     <StackPanel Margin="0,0,24,0"><TextBlock Text="两键交接分布" Style="{StaticResource SectionTitle}"/><local:HandoffDistribution x:Name="handoffDistribution" Height="116" Margin="0,8,0,0" AutomationProperties.Name="两键交接时间分布"/><TextBlock x:Name="distributionNote" Style="{StaticResource Caption}"/></StackPanel>
+     <StackPanel Grid.Column="1"><TextBlock Text="方向对比" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/><DataGrid RowHeight="30" MinRowHeight="30" ColumnHeaderHeight="32" x:Name="handoffDirections" Height="116" Focusable="False" CanUserSortColumns="False" AutomationProperties.Name="各方向交接时间与波动"><DataGrid.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="8,3"/></Style></DataGrid.CellStyle><DataGrid.ColumnHeaderStyle><Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}"><Setter Property="Padding" Value="8,5"/></Style></DataGrid.ColumnHeaderStyle><DataGrid.Columns><DataGridTextColumn Header="方向" Binding="{Binding Direction}" Width="72"/><DataGridTextColumn Header="次数" Binding="{Binding Count}" Width="60"/><DataGridTextColumn Header="中位 ms" Binding="{Binding MedianText}" Width="*"/><DataGridTextColumn Header="波动 ms" Binding="{Binding SpreadText}" Width="*"/></DataGrid.Columns></DataGrid></StackPanel>
+    </Grid>
+    <Border Background="{StaticResource PanelBrush2}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2,0,0,0" Padding="18,14" Margin="0,0,0,16"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,20,0"><TextBlock Text="下一步 · 键盘参数" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/><TextBlock x:Name="nextStep" Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel><Button Grid.Column="1" Content="参数与对照" Click="Parameters_Click" VerticalAlignment="Center"/></Grid></Border>
+    <Expander Header="同按、空档与开枪间隔" Margin="0,0,0,8">
+    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,1" Padding="0,16" Margin="0,0,0,16"><UniformGrid Columns="3">
+     <StackPanel Margin="0,0,24,0"><TextBlock Text="两键同时按住" FontWeight="SemiBold"/><TextBlock x:Name="overlapValue" Style="{StaticResource MetricValue}"/><TextBlock x:Name="overlapRange" Style="{StaticResource Caption}"/></StackPanel>
+     <StackPanel Margin="0,0,24,0"><TextBlock Text="两键都松开的空档" FontWeight="SemiBold"/><TextBlock x:Name="gapValue" Style="{StaticResource MetricValue}"/><TextBlock x:Name="gapRange" Style="{StaticResource Caption}"/></StackPanel>
+     <StackPanel><TextBlock Text="换向到按鼠标左键" FontWeight="SemiBold"/><TextBlock x:Name="clickValue" Style="{StaticResource MetricValue}"/><TextBlock x:Name="clickRange" Style="{StaticResource Caption}"/></StackPanel>
+    </UniformGrid></Border>
+    </Expander>
+    <Expander Header="交接顺序与统计口径" Margin="0,0,0,16"><StackPanel><local:HandoffBar x:Name="handoffBar" Height="12" Margin="0,12,0,10"/><TextBlock x:Name="handoffSummary" Style="{StaticResource Caption}"/><TextBlock Text="典型值是中位数；常见范围包含中间一半动作；交接波动是该范围的宽度。负交接值代表空档，正值代表同按。波动变小只说明节奏更一致，时长不是越短越好。初速低于 34 u/s 不计入；慢走与蹲伏分别比较。图中方案分界只标记相邻对局均有明确参数记录的变化。" Style="{StaticResource Caption}" Margin="0,10,0,0"/></StackPanel></Expander>
+    <DockPanel Margin="0,0,0,10"><Button x:Name="openSelected" DockPanel.Dock="Right" Content="查看所选对局" Click="OpenSelected_Click" IsEnabled="False"/><TextBlock Text="逐局记录" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/></DockPanel>
+    <DataGrid x:Name="historyGrid" Height="224" SelectionChanged="History_Selected" MouseDoubleClick="History_DoubleClick" AutomationProperties.Name="同组逐局记录"><DataGrid.Columns><DataGridTextColumn Header="对局时间" Binding="{Binding Label}" Width="132"/><DataGridTextColumn Header="地图" Binding="{Binding Map}" Width="115"/><DataGridTextColumn Header="动作数" Binding="{Binding Count}" Width="70"/><DataGridTextColumn Header="两键同按" Binding="{Binding Overlap.Typical}" Width="108"/><DataGridTextColumn Header="双键空档" Binding="{Binding Gap.Typical}" Width="108"/><DataGridTextColumn Header="换向到开枪" Binding="{Binding Click.Typical}" Width="115"/><DataGridTextColumn Header="参数方案" Binding="{Binding Scheme}" Width="*" MinWidth="140"/></DataGrid.Columns></DataGrid>
    </StackPanel>
-  </Border>
-  <UniformGrid Columns="3" Margin="0,0,0,14">
-   <Border Style="{StaticResource CardStyle}" Margin="0,0,9,0"><StackPanel><TextBlock Text="相反两键同时按住" Foreground="#71D6C3" FontSize="13"/><TextBlock x:Name="overlapValue" FontSize="32" FontWeight="SemiBold" Margin="0,7,0,5"/><TextBlock x:Name="overlapRange" FontSize="12" Foreground="#BACCDD"/><TextBlock Text="按下反向键后，两键重叠多久" FontSize="11" Foreground="#9EAFAE" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel></Border>
-   <Border Style="{StaticResource CardStyle}" Margin="0,0,9,0"><StackPanel><TextBlock Text="两键都松开的空档" Foreground="#EFBD70" FontSize="13"/><TextBlock x:Name="gapValue" FontSize="32" FontWeight="SemiBold" Margin="0,7,0,5"/><TextBlock x:Name="gapRange" FontSize="12" Foreground="#BACCDD"/><TextBlock Text="先松原键，再按反向键的间隔" FontSize="11" Foreground="#9EAFAE" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel></Border>
-   <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="换向后多久开枪" Foreground="#71AEFA" FontSize="13"/><TextBlock x:Name="clickValue" FontSize="32" FontWeight="SemiBold" Margin="0,7,0,5"/><TextBlock x:Name="clickRange" FontSize="12" Foreground="#BACCDD"/><TextBlock Text="反向键按下到第一次按鼠标左键" FontSize="11" Foreground="#9EAFAE" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel></Border>
-  </UniformGrid>
-  <TextBlock x:Name="handoffSummary" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,14"/>
-  <Border Style="{StaticResource CardStyle}" Margin="0,0,0,14"><StackPanel>
-   <TextBlock Text="逐局趋势" FontSize="17" FontWeight="SemiBold"/>
-   <TextBlock x:Name="trendSummary" TextWrapping="Wrap" Foreground="#BBCEDD" FontSize="12" Margin="0,8,0,8"/>
-   <ComboBox x:Name="metric" Width="180" HorizontalAlignment="Left" SelectionChanged="Metric_Changed"/><local:ProgressChart x:Name="chart" Height="215"/>
-   <TextBlock Text="每点一局；空心点不足 5 次，仅供观察。悬停查看数值与方案，点击进入本局动作。" FontSize="11" Foreground="#9EAFAE" TextWrapping="Wrap"/>
-   <Expander Header="这些数字怎样理解？"><TextBlock Text="典型值取中位数；常见范围包含中间一半动作。范围变窄，说明交接或开枪节奏更一致，但这些时间并非越小越好，也不是建议你等固定毫秒后开枪。只比较同一组；初速低于 34 的动作仍不计入。" TextWrapping="Wrap" FontSize="12" Margin="0,9,0,0"/></Expander>
-  </StackPanel></Border>
-  <TextBlock Text="每局记录 · 点击跳转到可核对的动作" FontSize="16" FontWeight="SemiBold" Margin="0,3,0,9"/>
-  <DataGrid x:Name="historyGrid" Height="186" SelectionChanged="History_Selected"><DataGrid.Columns>
-   <DataGridTextColumn Header="时间" Binding="{Binding Label}" Width="118"/><DataGridTextColumn Header="同类动作" Binding="{Binding Count}" Width="75"/>
-   <DataGridTextColumn Header="两键同按" Binding="{Binding Overlap.Typical}" Width="110"/><DataGridTextColumn Header="双键空档" Binding="{Binding Gap.Typical}" Width="110"/>
-   <DataGridTextColumn Header="换向到开枪" Binding="{Binding Click.Typical}" Width="110"/><DataGridTextColumn Header="参数方案" Binding="{Binding Scheme}" Width="*"/>
-  </DataGrid.Columns></DataGrid>
-</StackPanel><StackPanel x:Name="parametersPanel" Visibility="Collapsed">  <Border x:Name="settingsSection" Style="{StaticResource CardStyle}" Margin="0,0,0,14"><StackPanel>
-   <TextBlock Text="键盘参数：现在该不该调？" FontSize="18" FontWeight="SemiBold"/>
-   <TextBlock x:Name="adviceTitle" Foreground="#E9C88C" FontSize="17" Margin="0,10,0,6"/>
-   <TextBlock x:Name="advice" Foreground="#C0D2E1" FontSize="13" TextWrapping="Wrap"/>
-   <TextBlock x:Name="currentProfile" Foreground="#71D6C3" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
-   <TextBlock Text="先在官方驱动手动调整，再来记下方案。每次只改一项，其余保持一致；用同类对局观察变化。程序不会替你改触发、RT 或灯光。" TextWrapping="Wrap" Foreground="#92A9C1" FontSize="12" Margin="0,10,0,0"/>
-   <Expander IsExpanded="True" x:Name="profileEditor" Header="记录我现在实际使用的参数（或新方案）">
-    <StackPanel Margin="0,10,0,0">
-     <TextBlock x:Name="prefillNote" TextWrapping="Wrap" Foreground="#E4C88F" FontSize="12"/>
-     <WrapPanel Margin="0,8,0,0">
-      <StackPanel><TextBlock Text="方案名"/><TextBox x:Name="profileName" Width="155" MaxLength="60"/></StackPanel>
-      <StackPanel><TextBlock Text="A/D 触发 · mm"/><TextBox x:Name="adTrigger" Width="110"/></StackPanel>
-      <StackPanel><TextBlock Text="W/S 触发 · mm"/><TextBox x:Name="wsTrigger" Width="110"/></StackPanel>
-      <StackPanel><TextBlock Text="RT 按下 · mm"/><TextBox x:Name="rtPress" Width="110"/></StackPanel>
-      <StackPanel><TextBlock Text="RT 抬起 · mm"/><TextBox x:Name="rtRelease" Width="110"/></StackPanel>
-     </WrapPanel>
-     <TextBlock Text="其他设置 / 备注（回报率、模式、当日练习等）" FontSize="12"/><TextBox x:Name="profileNotes" MaxLength="1000" TextWrapping="Wrap"/>
-     <Button Content="已在驱动应用，记录为当前方案" HorizontalAlignment="Left" Click="SaveProfile_Click"/>
-     <TextBlock Text="保存后，只自动关联之后开始的对局。以前的对局不猜测参数；如果中途换过设置，请将那局标记为“未知 / 中途变更”。" FontSize="11" TextWrapping="Wrap" Foreground="#9EAFAE"/>
-    </StackPanel>
-   </Expander>
-   <TextBlock x:Name="profileStatus" Foreground="#E9C88C" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
-  </StackPanel></Border>
-  <Border Style="{StaticResource CardStyle}" Margin="0,0,0,14"><StackPanel>
-   <TextBlock Text="换参数前后，表现有没有差别？" FontSize="17" FontWeight="SemiBold"/>
-   <TextBlock Text="只使用上方同一组动作；参数未知的对局不参与方案比较。3 局 / 30 次是收集数据的提示门槛，不保证统计结论可靠。" Foreground="#9EAFAE" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,10"/>
-   <DataGrid x:Name="profileGrid" Height="142"><DataGrid.Columns>
-    <DataGridTextColumn Header="方案" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="数据量" Binding="{Binding Coverage}" Width="110"/>
-    <DataGridTextColumn Header="两键同按" Binding="{Binding Overlap.Typical}" Width="100"/><DataGridTextColumn Header="双键空档" Binding="{Binding Gap.Typical}" Width="100"/>
-    <DataGridTextColumn Header="换向到开枪" Binding="{Binding Click.Typical}" Width="110"/><DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="110"/>
-   </DataGrid.Columns></DataGrid>
-   <WrapPanel Margin="0,12,0,0"><TextBlock Text="旧方案" VerticalAlignment="Center" Margin="0,0,8,8"/><ComboBox x:Name="beforeProfile" Width="210" SelectionChanged="Comparison_Changed"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><TextBlock Text="新方案" VerticalAlignment="Center" Margin="8,0,8,8"/><ComboBox x:Name="afterProfile" Width="210" SelectionChanged="Comparison_Changed"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox></WrapPanel>
-   <TextBlock x:Name="comparisonText" TextWrapping="Wrap" Foreground="#BCD0E2" FontSize="13"/>
-   <Expander Header="为过去的对局补记参数 / 标记中途变更">
-    <StackPanel Margin="0,10,0,0"><TextBlock Text="只有确定当时用了这套参数才补记。选择“未知 / 中途变更”可把该局移出方案对比，原本的表现统计保留。" Foreground="#92A9C1" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
-     <WrapPanel><ComboBox x:Name="assignmentMatch" Width="300"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><ComboBox x:Name="assignmentProfile" Width="220"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" Foreground="#E1EAE7"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><Button Content="保存这局标记" Click="AssignProfile_Click"/></WrapPanel>
-    </StackPanel>
-   </Expander>
-  </StackPanel></Border>
-</StackPanel></StackPanel>
- </ScrollViewer></Grid>
+   <StackPanel x:Name="parametersPanel" Visibility="Collapsed">
+    <Border Background="#181A17" CornerRadius="0" Padding="22" Margin="0,0,0,20"><StackPanel><TextBlock Text="现在适合调参数吗？" Style="{StaticResource SectionTitle}"/><TextBlock x:Name="adviceTitle" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="30" Margin="0,10,0,8"/><TextBlock x:Name="advice" TextWrapping="Wrap" LineHeight="23"/><Button Content="回到趋势核对表现" Click="Overview_Click" HorizontalAlignment="Left" Style="{StaticResource QuietButton}" Margin="-10,10,0,0"/></StackPanel></Border>
+    <Border x:Name="settingsSection" Style="{StaticResource CardStyle}" Margin="0,0,0,20"><StackPanel><TextBlock Text="我的键盘方案" Style="{StaticResource SectionTitle}"/><TextBlock x:Name="currentProfile" TextWrapping="Wrap" Margin="0,10,0,12"/><TextBlock Text="在官方驱动应用设置，再在这里记录。每次只改一项，之后用同类动作对比。" Style="{StaticResource Caption}"/>
+     <Expander IsExpanded="False" x:Name="profileEditor" Header="记录当前参数 / 新方案" Margin="0,18,0,0"><StackPanel Margin="0,14,0,0"><TextBlock x:Name="prefillNote" Style="{StaticResource Caption}" Foreground="{StaticResource WarnBrush}"/><WrapPanel Margin="0,14,0,0">
+      <StackPanel Margin="0,0,14,14"><TextBlock Text="方案名称"/><TextBox x:Name="profileName" Width="192" MaxLength="60" Margin="0,6,0,0" AutomationProperties.Name="参数方案名称"/></StackPanel>
+      <StackPanel Margin="0,0,14,14"><TextBlock Text="A / D 触发 (mm)"/><TextBox x:Name="adTrigger" Width="123" Margin="0,6,0,0" AutomationProperties.Name="A D 触发行程，毫米"/></StackPanel>
+      <StackPanel Margin="0,0,14,14"><TextBlock Text="W / S 触发 (mm)"/><TextBox x:Name="wsTrigger" Width="123" Margin="0,6,0,0" AutomationProperties.Name="W S 触发行程，毫米"/></StackPanel>
+      <StackPanel Margin="0,0,14,14"><TextBlock Text="RT 按下 (mm)"/><TextBox x:Name="rtPress" Width="123" Margin="0,6,0,0" AutomationProperties.Name="RT 按下灵敏度，毫米"/></StackPanel>
+      <StackPanel Margin="0,0,0,14"><TextBlock Text="RT 抬起 (mm)"/><TextBox x:Name="rtRelease" Width="123" Margin="0,6,0,0" AutomationProperties.Name="RT 抬起灵敏度，毫米"/></StackPanel>
+     </WrapPanel><TextBlock Text="备注（回报率、模式或本次练习内容）" Style="{StaticResource Caption}"/><TextBox x:Name="profileNotes" MaxLength="1000" TextWrapping="Wrap" MinHeight="62" Margin="0,6,0,14" AutomationProperties.Name="方案备注"/><Button Content="记录为当前方案" HorizontalAlignment="Left" Click="SaveProfile_Click" Style="{StaticResource PrimaryButton}"/><TextBlock Text="仅关联保存之后开始的对局。不会写入键盘；历史对局不会自动补猜参数。" Style="{StaticResource Caption}" Margin="0,10,0,0"/></StackPanel></Expander>
+     <TextBlock x:Name="profileStatus" Foreground="{StaticResource WarnBrush}" TextWrapping="Wrap" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"/>
+    </StackPanel></Border>
+    <TextBlock Text="换参数前后，有什么变化" Style="{StaticResource SectionTitle}"/><TextBlock Text="仅比较上方同组动作。每方案 3 局 / 30 次是收集提示，不是统计可靠性的保证。" Style="{StaticResource Caption}" Margin="0,8,0,14"/>
+    <DataGrid x:Name="profileGrid" Height="160" AutomationProperties.Name="参数方案表现"><DataGrid.Columns><DataGridTextColumn Header="方案" Binding="{Binding Name}" Width="*" MinWidth="130"/><DataGridTextColumn Header="数据量" Binding="{Binding Coverage}" Width="105"/><DataGridTextColumn Header="两键同按" Binding="{Binding Overlap.Typical}" Width="105"/><DataGridTextColumn Header="双键空档" Binding="{Binding Gap.Typical}" Width="105"/><DataGridTextColumn Header="换向到开枪" Binding="{Binding Click.Typical}" Width="112"/><DataGridTextColumn Header="数据状态" Binding="{Binding Status}" Width="130"/></DataGrid.Columns></DataGrid>
+    <WrapPanel Margin="0,18,0,0"><StackPanel><TextBlock Text="旧方案" Style="{StaticResource Caption}" Margin="0,0,0,5"/><ComboBox x:Name="beforeProfile" Width="235" SelectionChanged="Comparison_Changed" AutomationProperties.Name="对照旧方案"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox></StackPanel><StackPanel><TextBlock Text="新方案" Style="{StaticResource Caption}" Margin="0,0,0,5"/><ComboBox x:Name="afterProfile" Width="235" SelectionChanged="Comparison_Changed" AutomationProperties.Name="对照新方案"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox></StackPanel></WrapPanel>
+    <Border Background="#181A17" CornerRadius="0" Padding="16" Margin="0,8,0,20"><TextBlock x:Name="comparisonText" TextWrapping="Wrap" LineHeight="23"/></Border>
+    <Expander Header="补记旧局方案 / 标记中途变更"><StackPanel Margin="0,12,0,0"><TextBlock Text="仅在确定当时参数时补记。选择“未知 / 中途变更”会移出方案比较，仍保留表现趋势。" Style="{StaticResource Caption}" Margin="0,0,0,10"/><WrapPanel><ComboBox x:Name="assignmentMatch" Width="285" AutomationProperties.Name="补记参数的对局"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><ComboBox x:Name="assignmentProfile" Width="215" AutomationProperties.Name="该局实际方案"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox><Button Content="保存这局标记" Click="AssignProfile_Click" Margin="0,0,0,8"/></WrapPanel><TextBlock x:Name="assignmentStatus" TextWrapping="Wrap" Foreground="{StaticResource WarnBrush}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/></StackPanel></Expander>
+   </StackPanel>
+  </StackPanel></ScrollViewer>
+ </Grid>
 </UserControl>

@@ -9,7 +9,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'outputs'
 EXCLUDED = {'bin', 'obj', '__pycache__', '.git', '.playwright-cli'}
-DOCS = ['KNOWN-ISSUES.md', 'README.md', 'RESEARCH.md', 'VERIFICATION.md', 'THIRD-PARTY-NOTICES.md', 'LICENSE']
+DOCS = ['KNOWN-ISSUES.md', 'README.md', 'RESEARCH.md', 'VERIFICATION.md', 'UI-DESIGN.md', 'THIRD-PARTY-NOTICES.md', 'LICENSE']
 
 
 def sha256(path):

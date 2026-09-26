@@ -16,7 +16,6 @@
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI" /><Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         </Style>
 
         <Style TargetType="Button">

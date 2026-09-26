@@ -7,13 +7,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.5.0</Version>
+    <Version>1.7.0</Version>
     <ApplicationIcon>Assets\StrafeLab.ico</ApplicationIcon>
     <Product>StrafeLab</Product>
     <Description>Local CS2 manual movement analysis</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\Fonts\*.ttf" />
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

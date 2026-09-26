@@ -40,6 +40,19 @@ public sealed class DemoMonitor : IAsyncDisposable
         return JsonSerializer.Deserialize<DemoLibraryState>(_snapshot,DemoLibrary.Json)!;
     }
     public IReadOnlyList<MatchReport> Reports()=>_library.ReadReports();
+    public async Task<CacheCleanupResult> CleanCacheAsync(CacheCleanupPlan approved)
+    {
+        if(!await _scan.WaitAsync(0))return new(0,0,0,"Demo 正在扫描或分析，请完成后重试。");
+        try
+        {
+            if(_stop.IsCancellationRequested)return new(0,0,0,"窗口正在关闭，清理已取消。");
+            if(_defer())return new(0,0,0,"CS2 正在运行，退出游戏后再清理缓存。");
+            var cleanup=new DemoCacheCleanup(_sessions.RootDirectory);
+            // A read-only window may clean only after the other writer releases its lease.
+            return await Task.Run(()=>_workerLease!=null?cleanup.CleanWithLease(approved,_stop.Token):cleanup.Clean(approved));
+        }
+        finally{_scan.Release();}
+    }
     public void Start()=>_worker??=Task.Run(RunAsync);
     public void Wake(){try{_wake.Release();}catch(SemaphoreFullException){} }
     private void Command(Action action){_commands.Enqueue(action);Wake();}

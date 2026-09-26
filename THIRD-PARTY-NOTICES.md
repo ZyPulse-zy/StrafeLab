@@ -11,3 +11,9 @@ StrafeLab application code is MIT licensed; see LICENSE. Bundled dependencies re
 The official MCHOSE frontend was inspected to understand the local HID protocol. Its frontend bundles are not redistributed in the application. HallEffectAnalogMapper was used as a protocol reference, not linked or executed. The application contains no virtual-controller or game-input generation component.
 
 The 60.6 MB parser test Demo used during verification is not redistributed in this package.
+
+## Bundled fonts (1.7 UI)
+
+- IBM Plex Mono Regular / SemiBold: [IBM Plex](https://github.com/IBM/plex), distribution from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexmono). SIL Open Font License 1.1; unmodified TTFs embedded as WPF resources. See `licenses/IBMPlexMono-OFL.txt`.
+- Sarasa Mono SC Regular / SemiBold 1.0.42: [Sarasa Gothic upstream release](https://github.com/be5invis/Sarasa-Gothic/releases/tag/v1.0.42). SIL Open Font License 1.1; unmodified TTFs embedded as WPF resources. See `licenses/SarasaGothic-OFL.txt`.
+- Fonts are loaded locally by the analysis UI; no system font installation or runtime download.

@@ -20,7 +20,7 @@ public sealed class HistoryWindow : Window
     public HistoryWindow(RuntimeService runtime)
     {
         _runtime=runtime;Title="StrafeLab · 历史与趋势";Width=1060;Height=730;MinWidth=880;MinHeight=600;
-        Background=new SolidColorBrush(Color.FromRgb(11,18,32));
+        Background=new SolidColorBrush(Color.FromRgb(11,18,32));Foreground=Brushes.LightGray;
         var root=new DockPanel{Margin=new Thickness(24)};Content=root;
         var title=new TextBlock{Text="历史对局与趋势",FontSize=25,Margin=new Thickness(0,0,0,14)};DockPanel.SetDock(title,Dock.Top);root.Children.Add(title);
         var actions=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(actions,Dock.Bottom);root.Children.Add(actions);

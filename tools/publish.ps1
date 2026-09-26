@@ -14,7 +14,7 @@ try {
         Copy-Item -Path (Join-Path $taskSource '*') -Destination $taskDestination -Recurse -Force
     }
     "python312.zip`n.`n..\demo-runtime`nimport site`n" | Set-Content -Encoding ascii -LiteralPath (Join-Path $taskOutput 'demo-python\python312._pth')
-    foreach ($taskDoc in @('KNOWN-ISSUES.md','README.md','RESEARCH.md','VERIFICATION.md','THIRD-PARTY-NOTICES.md','LICENSE')) {
+    foreach ($taskDoc in @('KNOWN-ISSUES.md','README.md','RESEARCH.md','VERIFICATION.md','UI-DESIGN.md','THIRD-PARTY-NOTICES.md','LICENSE')) {
         if(Test-Path $taskDoc){Copy-Item -LiteralPath $taskDoc -Destination $taskOutput -Force}
     }
     Copy-Item -LiteralPath tools\demo-extractor.py -Destination $taskOutput -Force

@@ -49,6 +49,26 @@ public sealed class ProgressAnalysisTests
         var history=new KeyboardProfileHistory{Profiles=[Profile("A",1),Profile("B",3) with{AppliedAtUtc=Epoch.AddDays(3).AddMinutes(10)}]};
         Assert.Null(history.For(Report(3,a)));
     }
+    [Fact] public void Tactical_readouts_pool_eligible_edges_and_preserve_direction_and_missingness()
+    {
+        var missing=Action();missing.GapMs=null;
+        var reverse=Action(30);reverse.Direction="D→A";
+        var report=Report(1,Action(0,20),Action(10),reverse,missing,Action(999,speed:33.999));
+        var unreliable=Report(2,Action(888));unreliable.Alignment=null;
+        var s=ProgressAnalysis.Build([report,unreliable],ProgressAnalysis.Key(Action()),new());
+        Assert.Equal(4,s.Count);Assert.Equal(3,s.Handoff.Count);Assert.Equal(10,s.Handoff.Median);
+        Assert.Equal(25,s.Handoff.Spread);Assert.Equal(new double[]{-20,10,30},s.HandoffValues);
+        Assert.Equal(1,s.UnknownHandoff);Assert.Equal(2,s.Directions.Count);
+        Assert.Equal(3,s.Directions.Single(d=>d.Direction=="A→D").Count);
+        Assert.Equal(2,s.Directions.Single(d=>d.Direction=="A→D").Handoff.Count);
+        Assert.Equal(30,s.Directions.Single(d=>d.Direction=="D→A").Handoff.Median);
+    }
+    [Fact] public void Scheme_markers_use_known_identifiers_instead_of_duplicate_display_names()
+    {
+        var history=new KeyboardProfileHistory{Profiles=[Profile("A",1) with{Name="基线"},Profile("B",3) with{Name="基线"}]};
+        var s=ProgressAnalysis.Build([Report(0,Action()),Report(2,Action()),Report(4,Action())],ProgressAnalysis.Key(Action()),history);
+        Assert.Null(s.Matches[0].SchemeId);Assert.Equal("A",s.Matches[1].SchemeId);Assert.Equal("B",s.Matches[2].SchemeId);
+    }
     [Fact] public void Profile_comparison_excludes_unknown_history_but_keeps_it_in_progress()
     {
         var reports=new[]{Report(1,Action()),Report(3,Action()),Report(5,Action())};

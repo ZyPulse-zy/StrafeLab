@@ -11,6 +11,12 @@ public sealed record ProgressMatch(string SessionId,DateTime Started,string Map,
     TimingDistribution Overlap,TimingDistribution Gap,TimingDistribution Click,TimingDistribution Handoff)
 {
     public string Label=>Started.ToLocalTime().ToString("MM-dd HH:mm");
+    public string? SchemeId {get;init;}
+}
+public sealed record DirectionHandoff(string Direction,int Count,TimingDistribution Handoff)
+{
+    public string MedianText=>Handoff.Median?.ToString("+0.#;-0.#;0")??"—";
+    public string SpreadText=>Handoff.Count>=2?Handoff.Spread?.ToString("0.#")??"—":"—";
 }
 public sealed record ProfileComparison(string Id,string Name,int Count,int Matches,string Parameters,
     TimingDistribution Overlap,TimingDistribution Gap,TimingDistribution Click,TimingDistribution Handoff)
@@ -29,6 +35,9 @@ public sealed record ProgressSnapshot(ProgressCohort? Cohort,IReadOnlyList<Progr
     public int ReleaseFirst {get;init;}
     public int SameTimestamp {get;init;}
     public int UnknownHandoff {get;init;}
+    public TimingDistribution Handoff {get;init;}=new(0,null,null,null);
+    public IReadOnlyList<double> HandoffValues {get;init;}=[];
+    public IReadOnlyList<DirectionHandoff> Directions {get;init;}=[];
     public string HandoffSummary=>Count==0?"配对完成后显示交接习惯":
         $"交接习惯：{ReverseFirst} 次先按反向键，{ReleaseFirst} 次先松原键，{SameTimestamp} 次同一记录时刻"+
         (UnknownHandoff>0?$"，{UnknownHandoff} 次边沿缺失":"")+"。这是顺序分布，不是好坏评分。";
@@ -67,7 +76,7 @@ public static class ProgressAnalysis
         {
             var r=g.First().Report;var a=g.Select(x=>x.Action).ToArray();
             return new ProgressMatch(r.SessionId,r.StartedAtUtc,r.Map,a.Length,history.For(r)?.Name??"参数未记录",
-                Distribution(a.Select(x=>x.OverlapMs)),Distribution(a.Select(x=>x.GapMs)),Distribution(a.Select(x=>(double?)x.ClickMs)),Distribution(a.Select(Handoff)));
+                Distribution(a.Select(x=>x.OverlapMs)),Distribution(a.Select(x=>x.GapMs)),Distribution(a.Select(x=>(double?)x.ClickMs)),Distribution(a.Select(Handoff))){SchemeId=history.For(r)?.Id};
         }).ToArray();
         var profiles=rows.Where(x=>history.For(x.Report)!=null).GroupBy(x=>history.For(x.Report)!.Id).Select(g=>
         {
@@ -79,7 +88,10 @@ public static class ProgressAnalysis
             Distribution(rows.Select(x=>(double?)x.Action.ClickMs)),profiles,rows.Count(x=>history.For(x.Report)==null))
         {
             ReverseFirst=rows.Count(x=>Handoff(x.Action)>0),ReleaseFirst=rows.Count(x=>Handoff(x.Action)<0),
-            SameTimestamp=rows.Count(x=>Handoff(x.Action)==0),UnknownHandoff=rows.Count(x=>!Handoff(x.Action).HasValue)
+            SameTimestamp=rows.Count(x=>Handoff(x.Action)==0),UnknownHandoff=rows.Count(x=>!Handoff(x.Action).HasValue),
+            Handoff=Distribution(rows.Select(x=>Handoff(x.Action))),
+            HandoffValues=rows.Select(x=>Handoff(x.Action)).Where(x=>x.HasValue&&double.IsFinite(x.Value)).Select(x=>x!.Value).ToArray(),
+            Directions=rows.GroupBy(x=>x.Action.Direction).OrderBy(g=>g.Key).Select(g=>new DirectionHandoff(g.Key,g.Count(),Distribution(g.Select(x=>Handoff(x.Action))))).ToArray()
         };
     }
     public static string Trend(ProgressSnapshot snapshot)
