@@ -30,5 +30,24 @@ class VelocityTests(unittest.TestCase):
         self.assertTrue(pd.isna(result[(result.steamid==1)&(result.tick==21)].velocity_X.iloc[0]))
     def test_missing_clock_fails_closed(self):
         with self.assertRaises(RuntimeError):extractor.prepare_velocities(self.frame().drop(columns=['game_time']))
+    def test_missing_xyz_has_an_actionable_failure_code(self):
+        with self.assertRaises(extractor.ExtractionError) as error:
+            extractor.prepare_velocities(self.frame().drop(columns=['X','Y','Z']))
+        self.assertEqual(error.exception.code,'missing_motion_fields')
+    def test_empty_or_nonfinite_positions_do_not_fabricate_speed(self):
+        for value in [float('nan'),float('inf'),'unavailable']:
+            frame=self.frame();frame['X']=value
+            with self.assertRaises(extractor.ExtractionError) as error:extractor.prepare_velocities(frame)
+            self.assertEqual(error.exception.code,'missing_motion_fields')
+    def test_irregular_clock_remains_rejected(self):
+        frame=self.frame();frame.loc[frame.tick%2==0,'game_time']+=.005
+        with self.assertRaises(extractor.ExtractionError) as error:extractor.prepare_velocities(frame)
+        self.assertEqual(error.exception.code,'invalid_clock')
+    def test_isolated_bad_position_preserves_unknown_intervals(self):
+        frame=self.frame();frame.loc[(frame.steamid==1)&(frame.tick==20),'X']=float('nan')
+        result,_=extractor.prepare_velocities(frame)
+        p=result[result.steamid==1].set_index('tick')
+        self.assertTrue(pd.isna(p.loc[20,'velocity_X']));self.assertTrue(pd.isna(p.loc[21,'velocity_X']))
+        self.assertAlmostEqual(p.loc[22,'velocity_X'],21.5)
 
 if __name__=='__main__':unittest.main()

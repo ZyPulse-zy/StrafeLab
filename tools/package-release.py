@@ -48,7 +48,7 @@ def main():
     for relative in ['StrafeLab.exe', 'demo-python/python.exe', 'demo-runtime/demoparser2', 'demo-extractor.py']:
         if not (app / relative).exists():
             raise RuntimeError(f'Missing release component: {relative}')
-    forbidden = {'gsi-token.txt', 'hall-debug-recovery.json', 'errors.log', 'demo-library.json', 'keyboard-profiles.json', 'collector-status.json', 'collector-settings.json'}
+    forbidden = {'gsi-token.txt', 'hall-debug-recovery.json', 'errors.log', 'demo-library.json', 'session-index.json', 'keyboard-profiles.json', 'collector-status.json', 'collector-settings.json'}
     for path in app.rglob('*'):
         if path.name.lower() in forbidden or (path.is_dir() and path.name.lower() in {'sessions', 'analysis', 'demo-cache', 'incoming'}):
             raise RuntimeError('User state must not be shipped: ' + str(path.relative_to(app)))

@@ -34,6 +34,7 @@ gamestate_integration_strafelab.cfg
 **/demo-cache/
 **/analysis/
 demo-library.json
+session-index.json
 keyboard-profiles.json
 collector-status.json
 collector-settings.json

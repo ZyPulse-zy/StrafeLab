@@ -23,6 +23,12 @@ DEFAULT_TICKRATE = 64.0
 EVENTS = ("weapon_fire", "round_start", "round_freeze_end", "player_spawn")
 
 
+class ExtractionError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 def emit(value: Mapping[str, Any]) -> None:
     print(json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
 
@@ -191,19 +197,27 @@ def prepare_velocities(frame):
     silently label that one-tick-old value as speed at the current tick.
     """
     import numpy as np
-    frame = frame.sort_values(["steamid", "tick"]).copy()
-    if "game_time" not in frame:
-        raise RuntimeError("game_time unavailable; cannot verify Demo clock")
+    required = {"steamid", "tick", "game_time", "X", "Y", "Z"}
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise ExtractionError("missing_motion_fields", "Missing required Demo fields: " + ", ".join(missing))
+    import pandas as pd
+    positions = frame[["X", "Y", "Z"]].apply(pd.to_numeric, errors="coerce")
+    if int(np.isfinite(positions).all(axis=1).sum()) < 32:
+        raise ExtractionError("missing_motion_fields", "Not enough finite position samples; speed remains unknown")
+    frame = frame.copy()
+    frame[["X", "Y", "Z"]] = positions
+    frame = frame.sort_values(["steamid", "tick"])
     groups = frame.groupby("steamid", sort=False)
     dt = groups["game_time"].diff()
     ticks = groups["tick"].diff()
     ratios = (ticks / dt).replace([np.inf, -np.inf], np.nan)
     valid = ratios[(dt > 0) & (ticks > 0)].dropna()
     if len(valid) < 32:
-        raise RuntimeError("Not enough samples to verify Demo clock/player identity")
+        raise ExtractionError("invalid_clock", "Not enough samples to verify Demo clock/player identity")
     rate = float(valid.median())
     if not 30 <= rate <= 256 or float((abs(valid-rate) < rate*.002).mean()) < .98:
-        raise RuntimeError("Demo clock is irregular; synchronization rejected")
+        raise ExtractionError("invalid_clock", "Demo clock is irregular; synchronization rejected")
     for axis in ("X", "Y", "Z"):
         delta = groups[axis].diff()
         frame["velocity_"+axis] = (delta/dt).where((ticks == 1) & (dt > 0) & (dt < .04))
@@ -353,6 +367,8 @@ def main() -> int:
         )
         return 0
     except Exception as exc:
+        code = exc.code if isinstance(exc, ExtractionError) else "parser_error"
+        print("STRAFELAB_ERROR " + json.dumps({"code": code}, separators=(",", ":")), file=sys.stderr)
         print(f"demo parse failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 4
 

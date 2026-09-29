@@ -19,11 +19,19 @@ public sealed class DemoJob
     public string SessionStamp { get; set; } = "";
     public List<string> ContentHashes { get; set; } = [];
     public Dictionary<string,string> AttemptedSessions { get; set; } = [];
+    public Dictionary<string,DemoContentInfo> Contents {get;set;}=[];
+    public string FailureCode {get;set;}="";
+    public string FailureDiagnostic {get;set;}="";
+    public string FailureRevision {get;set;}="";
+    public int FailureCount {get;set;}
+    public bool UserIgnored {get;set;}
     [System.Text.Json.Serialization.JsonIgnore] public string Name => System.IO.Path.GetFileName(Path);
     [System.Text.Json.Serialization.JsonIgnore] public string UpdatedLocal => WrittenUtc.ToLocalTime().ToString("MM-dd HH:mm");
 }
 public sealed class DemoLibraryState
 {
+    public const int CurrentQueueVersion=2;
+    public int QueueVersion {get;set;}=1;
     public int Version { get; set; } = MatchReport.CurrentVersion;
     public bool Enabled { get; set; } = true;
     public List<string> Roots { get; set; } = [];
@@ -52,16 +60,37 @@ public sealed class DemoLibrary
         {
             if(State.Version!=MatchReport.CurrentVersion){job.AttemptedSessions.Clear();job.SessionStamp="";job.State="待分析";}
             if(job.State=="分析中") {job.SessionStamp="";job.State="待分析";}
+            DemoFailures.Migrate(job);
             // Always observe stability again after restarting, including downloads still in flight.
             job.StableSinceUtc=DateTime.UtcNow;
         }
         State.Version=MatchReport.CurrentVersion;
+        State.QueueVersion=DemoLibraryState.CurrentQueueVersion;
     }
     public static bool Supported(string path) => path.EndsWith(".dem",StringComparison.OrdinalIgnoreCase)||
         path.EndsWith(".zip",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".dem.bz2",StringComparison.OrdinalIgnoreCase);
     public static string Stamp(string value)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     public void Save() => Atomic(System.IO.Path.Combine(Root,"demo-library.json"),State);
     public void SaveReport(MatchReport report) => Atomic(System.IO.Path.Combine(ReportsPath,report.SessionId+".json"),report);
+    public bool SaveReportIfChanged(MatchReport report)
+    {
+        var path=System.IO.Path.Combine(ReportsPath,report.SessionId+".json");
+        try
+        {
+            if(File.Exists(path))
+            {
+                var old=JsonSerializer.Deserialize<MatchReport>(File.ReadAllText(path),Json);
+                if(old!=null)
+                {
+                    var at=report.UpdatedAtUtc;report.UpdatedAtUtc=old.UpdatedAtUtc;
+                    if(JsonSerializer.Serialize(old,Json)==JsonSerializer.Serialize(report,Json))return false;
+                    report.UpdatedAtUtc=at;
+                }
+            }
+        }
+        catch(IOException){}catch(JsonException){}
+        SaveReport(report);return true;
+    }
     public IReadOnlyList<MatchReport> ReadReports()
     {
         var reports=new List<MatchReport>();
@@ -91,7 +120,7 @@ public sealed class DemoLibrary
         if(job.Length!=info.Length||job.WrittenUtc!=info.LastWriteTimeUtc)
         {
             job.Length=info.Length;job.WrittenUtc=info.LastWriteTimeUtc;job.StableSinceUtc=now;
-            job.State="等待下载完成";job.SessionStamp="";job.Attempts=0;job.NextRetryUtc=default;job.ContentHashes.Clear();job.AttemptedSessions.Clear();return false;
+            DemoFailures.Reset(job);job.State="等待下载完成";job.ContentHashes.Clear();return false;
         }
         return info.Length>=8&&now-job.StableSinceUtc>=settle&&now-info.LastWriteTimeUtc>=settle;
     }

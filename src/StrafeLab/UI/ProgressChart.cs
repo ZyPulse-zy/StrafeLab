@@ -13,6 +13,7 @@ public sealed class ProgressChart : FrameworkElement
     private int _metric,_selected=-1;
     private const double Left=52,Right=30,Top=30,Foot=49;
     public int Metric {get=>_metric;set{_metric=value;InvalidateVisual();}}
+    public string EmptyMessage {get;set;}="配对 Demo 后显示逐局变化";
     public event Action<string>? MatchClicked;
     protected override AutomationPeer OnCreateAutomationPeer()=>new ChartPeer(this);
     private sealed class ChartPeer(ProgressChart owner):FrameworkElementAutomationPeer(owner)
@@ -52,7 +53,7 @@ public sealed class ProgressChart : FrameworkElement
     {
         _selected=index;
         string? summary=index<0||index>=_points.Count?null:
-            $"{_points[index].Label} · {_points[index].Map} · {_points[index].Count} 次动作\n{_points[index].Scheme}\n交接 {_points[index].Handoff.Typical}（−空档 / +同按）\n两键同按 {_points[index].Overlap.Typical}\n双键空档 {_points[index].Gap.Typical}\n换向到开枪 {_points[index].Click.Typical}\n点击或按 Enter 查看本局动作";
+            $"{_points[index].Label} · {_points[index].Map} · {_points[index].Count} 次动作\n{_points[index].Scheme}\n交接 {_points[index].Handoff.Typical}（−空档 / +同按）\n两键同按 {_points[index].Overlap.Typical}\n双键空档 {_points[index].Gap.Typical}\n换向到按鼠标 {_points[index].Click.Typical}\n点击或按 Enter 查看本局动作";
         ToolTip=summary;AutomationProperties.SetItemStatus(this,summary??"未选择对局");InvalidateVisual();
     }
     protected override void OnRender(DrawingContext dc)
@@ -82,7 +83,7 @@ public sealed class ProgressChart : FrameworkElement
         for(int i=0;i<_points.Count;i++)dc.DrawLine(gridPen,new(X(i),Top),new(X(i),bottom));
         if(_points.Count==0)
         {
-            Text("配对 Demo 后显示逐局变化",Left+width/2,Top+height/2-10,TacticalDrawing.Muted,12,TextAlignment.Center);
+            Text(EmptyMessage,Left+width/2,Top+height/2-10,TacticalDrawing.Muted,12,TextAlignment.Center);
             return;
         }
         // The band joins only consecutive sufficiently sampled matches; missing edges break it.

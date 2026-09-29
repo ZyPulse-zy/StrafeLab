@@ -21,11 +21,12 @@ public sealed class DemoMonitor : IAsyncDisposable
     private readonly SemaphoreSlim _wake=new(0,1);
     private readonly SemaphoreSlim _scan=new(1,1);
     private readonly ConcurrentQueue<Action> _commands=new();
-    private readonly Dictionary<string,(string Stamp,SessionIndex? Session)> _sessionCache=[];
-    private sealed record SessionIndex(string SessionId,string? Map,string? PlayerSteamId,string Stamp);
+    private SessionCatalog? _catalog;
+    public int LastLoadedSessions=>_catalog?.LastLoadedCount??0;
     private Task? _worker;
     private readonly Func<bool> _defer;
     private string _snapshot="{}";
+    private string? _persisted;
     public string Status {get;private set;}="等待后台扫描";
     public event EventHandler? Changed;
     public DemoMonitor(SessionStore store,IEnumerable<string> roots,DemoService? parser=null,Func<bool>? defer=null)
@@ -68,14 +69,25 @@ public sealed class DemoMonitor : IAsyncDisposable
         if(!DemoLibrary.Supported(full))return;
         if(!_library.State.ManualFiles.Contains(full,StringComparer.OrdinalIgnoreCase))_library.State.ManualFiles.Add(full);
         var job=_library.State.Jobs.FirstOrDefault(j=>j.Path.Equals(full,StringComparison.OrdinalIgnoreCase));
-        if(job!=null){job.SessionStamp="";job.NextRetryUtc=default;job.Attempts=0;job.State="待分析";job.AttemptedSessions.Clear();}
+        if(job!=null)DemoFailures.Reset(job);
     });
     public void SetEnabled(bool enabled)=>Command(()=>_library.State.Enabled=enabled);
-    public void Retry()=>Command(()=>{foreach(var job in _library.State.Jobs.Where(j=>j.State is "失败" or "未匹配"))
-        {job.SessionStamp="";job.NextRetryUtc=default;job.Attempts=0;job.State="待分析";job.AttemptedSessions.Clear();}});
+    public void Retry(IEnumerable<string>? paths=null)
+    {
+        var selected=paths?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Command(()=>{foreach(var job in _library.State.Jobs.Where(j=>selected==null?j.State is "失败" or "未匹配" or "需处理":selected.Contains(j.Path)))DemoFailures.Reset(job);});
+    }
+    public void Ignore(IEnumerable<string> paths)
+    {
+        var selected=paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Command(()=>{foreach(var job in _library.State.Jobs.Where(j=>selected.Contains(j.Path)))
+        {job.UserIgnored=true;job.State="已忽略";job.Detail="用户已忽略；保留原文件，手动重试可恢复。";job.NextRetryUtc=default;}});
+    }
     private void Publish()
     {
-        _library.Save();_snapshot=JsonSerializer.Serialize(_library.State,DemoLibrary.Json);Changed?.Invoke(this,EventArgs.Empty);
+        var current=JsonSerializer.Serialize(_library.State,DemoLibrary.Json);
+        if(current!=_persisted){_library.Save();_persisted=current;}
+        _snapshot=current;Changed?.Invoke(this,EventArgs.Empty);
     }
     private async Task RunAsync()
     {
@@ -107,29 +119,16 @@ public sealed class DemoMonitor : IAsyncDisposable
                 catch(IOException)
                 {Status="后台任务由另一个 StrafeLab 窗口处理；本页仍可查看报告，请在该窗口管理目录";Changed?.Invoke(this,EventArgs.Empty);return;}
                 // Another window may have updated the queue while this instance was read-only.
-                _library=new DemoLibrary(_sessions.RootDirectory,_defaultRoots);_sessionCache.Clear();
+                _library=new DemoLibrary(_sessions.RootDirectory,_defaultRoots);_catalog=new(_sessions.RootDirectory);
+                _persisted=File.Exists(Path.Combine(_library.Root,"demo-library.json"))?File.ReadAllText(Path.Combine(_library.Root,"demo-library.json")):null;
             }
             while(_commands.TryDequeue(out var command))command();
             var state=_library.State;
             if(!state.Enabled){Status="后台分析已暂停";Publish();return;}
             if(_defer()){Status="CS2 运行中 · Demo 解析等待游戏退出";Publish();return;}
-            var sessions=new List<SessionIndex>();var stamps=new List<string>();
             var reports=_library.ReadReports().ToDictionary(r=>r.SessionId);
-            foreach(var path in Directory.EnumerateFiles(_sessions.SessionsDirectory,"*.json"))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var info=new FileInfo(path);var id=Path.GetFileNameWithoutExtension(path);var stamp=$"{info.Length}:{info.LastWriteTimeUtc.Ticks}";
-                if(!_sessionCache.TryGetValue(id,out var cached)||cached.Stamp!=stamp)
-                {
-                    var loaded=_sessions.Load(id);
-                    // In-progress and diagnostic sessions are never paired or included in the report cohort.
-                    if(loaded?.EndedAtUtc==null||loaded.DiagnosticMode)loaded=null;
-                    cached=(stamp,loaded==null?null:new SessionIndex(id,loaded.Map,loaded.PlayerSteamId,stamp));_sessionCache[id]=cached;
-                    if(loaded!=null&&(!reports.TryGetValue(id,out var old)||old.Alignment?.IsReliable!=true))
-                        _library.SaveReport(MatchAnalysis.Build(loaded));
-                }
-                if(cached.Session!=null&&cached.Session.PlayerSteamId!=null){sessions.Add(cached.Session);stamps.Add(id+stamp);}
-            }
+            var sessions=_catalog!.Refresh(_sessions,_library,reports,cancellationToken);
+            var stamps=sessions.Select(s=>s.SessionId+s.Stamp);
             string sessionStamp=DemoLibrary.Stamp(string.Join("|",stamps.Order())+MatchReport.CurrentVersion);
             var now=DateTime.UtcNow;var ready=new List<DemoJob>();
             var paths=DemoLibrary.Enumerate(state.Roots).Concat(state.ManualFiles).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -143,8 +142,9 @@ public sealed class DemoMonitor : IAsyncDisposable
                     if(!jobs.TryGetValue(path,out var job)){job=new(){Path=path,StableSinceUtc=now};state.Jobs.Add(job);jobs[path]=job;}
                     if(!DemoLibrary.Observe(job,info,now,TimeSpan.FromSeconds(10)))continue;
                     if(job.State=="等待下载完成")job.State="待分析";
-                    if(job.State=="已忽略")continue;
-                    if(job.SessionStamp!=sessionStamp&&job.NextRetryUtc<=now&&sessions.Count>0)ready.Add(job);
+                    if(job.State=="已忽略"||job.UserIgnored)continue;
+                    if(DemoFailures.IsBlocked(job)&&!(job.SessionStamp!=sessionStamp&&job.Contents.Values.Any(c=>c.State=="未匹配")))continue;
+                    if(job.SessionStamp!=sessionStamp&&job.NextRetryUtc<=now)ready.Add(job);
                 }
                 catch(IOException){}catch(UnauthorizedAccessException){}
             }
@@ -156,26 +156,48 @@ public sealed class DemoMonitor : IAsyncDisposable
                 Status=$"监控 {state.Roots.Count} 个目录 · {state.Jobs.Count} 个候选 · 等待新 Demo"+(inaccessible>0?$" · {inaccessible} 个目录不可用":"");
                 Publish();return;
             }
+            // Keep the remainder visible to the bounded background worker and its next scheduled batch.
+            // A new recording can make old unmatched files ready without changing the Demo files themselves.
+            foreach(var queued in ready.Where(j=>j!=next))queued.State="待分析";
             bool hadMatch=next.State=="已完成";
             next.State="分析中";next.Attempts++;Status="后台解析："+next.Name;Publish();
+            string? currentHash=null;
             try
             {
                 // Deny simultaneous writers while hashing, decompressing and parsing; never touch an incomplete download.
                 using var lease=new FileStream(next.Path,FileMode.Open,FileAccess.Read,FileShare.Read);
                 if(lease.Length!=next.Length||File.GetLastWriteTimeUtc(next.Path)!=next.WrittenUtc)throw new IOException("下载文件仍在变化");
                 var materialized=await _library.MaterializeAsync(next.Path,cancellationToken);
-                bool matched=hadMatch;var notes=new List<string>();if(hadMatch)notes.Add("保留既有配对结果");next.ContentHashes.Clear();
+                bool matched=hadMatch;Exception? contentFailure=null;var notes=new List<string>();if(hadMatch)notes.Add("保留既有配对结果");next.ContentHashes.Clear();
                 foreach(var path in materialized)
                 {
-                    if(!DemoHeaderScanner.Read(path).IsSource2){notes.Add("非 Source 2 Demo");continue;}
+                    currentHash=null;
                     await using var file=File.OpenRead(path);
                     string hash=Convert.ToHexString(await SHA256.HashDataAsync(file,cancellationToken)).ToLowerInvariant();
                     if(next.ContentHashes.Contains(hash)){notes.Add("压缩包内存在重复 Demo，已跳过");continue;}
                     next.ContentHashes.Add(hash);
+                    currentHash=hash;
+                    var previousContent=next.Contents.GetValueOrDefault(hash);
+                    var content=new DemoContentInfo();next.Contents[hash]=content;
+                    try
+                    {
+                    var header=DemoHeaderScanner.Read(path);
+                    if(!header.IsSource2)throw new InvalidDataException("不是 Source 2 Demo");
                     matched|=reports.Values.Any(r=>r.DemoHash==hash&&r.Alignment?.IsReliable==true);
+                    if(previousContent?.State=="需处理"&&next.FailureRevision==DemoFailures.ParserRevision&&!DemoFailures.ForCode(previousContent.ReasonCode).Retryable)
+                        throw new IOException("STRAFELAB_ERROR "+JsonSerializer.Serialize(new{code=previousContent.ReasonCode}));
+                    var blockedCopy=state.Jobs.FirstOrDefault(j=>j!=next&&!j.UserIgnored&&j.FailureRevision==DemoFailures.ParserRevision&&
+                        j.Contents.TryGetValue(hash,out var c)&&c.State=="需处理"&&!DemoFailures.ForCode(c.ReasonCode).Retryable);
+                    if(blockedCopy!=null)throw new IOException("STRAFELAB_ERROR "+JsonSerializer.Serialize(new{code=blockedCopy.Contents[hash].ReasonCode}));
                     var duplicate=state.Jobs.FirstOrDefault(j=>j!=next&&j.ContentHashes.Contains(hash)&&j.SessionStamp==sessionStamp);
-                    if(duplicate!=null){matched|=duplicate.State=="已完成";notes.Add("内容重复，复用既有结果");continue;}
-                    var map=DemoHeaderScanner.Read(path).MapHint;
+                    if(duplicate!=null&&duplicate.State is "已完成" or "未匹配")
+                    {
+                        if(duplicate.Contents.TryGetValue(hash,out var info))next.Contents[hash]=info;
+                        notes.Add("内容重复，复用既有结果");continue;
+                    }
+                    var map=header.MapHint;
+                    content.Map=map;content.ReasonCode=sessions.Count==0?"no_recording":map!=null&&!sessions.Any(s=>s.Map==map)?"map":"sync";
+                    content.Detail=content.ReasonCode switch{"no_recording"=>"尚无已结束且身份明确的本地录制；新录制出现后自动核对。","map"=>"没有同地图的已结束本地录制；新录制出现后自动核对。",_=>"已有本地记录，但身份或时间锚点尚未通过核对。"};
                     foreach(var group in sessions.Where(s=>(map==null||s.Map==map)&&
                         next.AttemptedSessions.GetValueOrDefault(hash+":"+s.SessionId)!=s.Stamp).GroupBy(s=>s.PlayerSteamId!))
                     {
@@ -189,6 +211,12 @@ public sealed class DemoMonitor : IAsyncDisposable
                                 TickRate=parsed.TickRate,Parser=parsed.Parser,Observations=parsed.Observations.Where(o=>o.Kind!="player_sample").ToList()});
                         }
                         if(parsed.Error!=null)throw new IOException(parsed.Error);
+                        if(!parsed.Observations.Any(o=>o.SteamId==group.Key))
+                        {
+                            content.ReasonCode="identity";content.Detail="录像中没有找到本机玩家的可用事件或位置；不会把别人的动作对齐到本地记录。";
+                            foreach(var entry in group)next.AttemptedSessions[hash+":"+entry.SessionId]=entry.Stamp;
+                            continue;
+                        }
                         foreach(var entry in group)
                         {
                             var session=_sessions.Load(entry.SessionId);if(session?.EndedAtUtc==null)continue;
@@ -196,7 +224,7 @@ public sealed class DemoMonitor : IAsyncDisposable
                             if(reports.TryGetValue(session.SessionId,out var existing)&&existing.Alignment?.IsReliable==true&&existing.DemoHash!=hash)
                                 continue; // A different demo must not overwrite an already identity-bound match.
                             var alignment=DemoService.Align(session,parsed);
-                            if(!alignment.IsReliable){next.AttemptedSessions[hash+":"+session.SessionId]=entry.Stamp;notes.Add($"{session.StartedAtUtc.ToLocalTime():MM-dd HH:mm}：{alignment.Explanation}");continue;}
+                            if(!alignment.IsReliable){next.AttemptedSessions[hash+":"+session.SessionId]=entry.Stamp;content.ReasonCode="sync";content.Detail=alignment.Explanation;notes.Add($"{session.StartedAtUtc.ToLocalTime():MM-dd HH:mm}：{alignment.Explanation}");continue;}
                             if(!hasFrames)
                             {
                                 parsed=await _parser.ParseAsync(path,group.Key,cancellationToken);hasFrames=true;
@@ -205,22 +233,44 @@ public sealed class DemoMonitor : IAsyncDisposable
                             var report=MatchAnalysis.Build(session,parsed,alignment);report.DemoPath=next.Path;report.DemoHash=hash;
                             // Position differences are interval velocities, not instantaneous state for physical parameter fitting.
                             report.Calibration=new(){Explanation="Demo 区间速度用于复盘；尚不用于瞬时移动模型校准，保留原参数"};
-                            _library.SaveReport(report);reports[session.SessionId]=report;matched=true;next.AttemptedSessions[hash+":"+session.SessionId]=entry.Stamp;
+                            _library.SaveReportIfChanged(report);reports[session.SessionId]=report;matched=true;next.AttemptedSessions[hash+":"+session.SessionId]=entry.Stamp;
+                            content.State="已完成";content.ReasonCode="matched";content.Detail="已通过身份与时间同步检查。";
                             notes.Add($"{report.LocalTime} {report.Map}：匹配 {report.Matched}/{report.Count} 次动作，残差 {alignment.ResidualRmsMs:F1} ms");
                         }
                     }
+                    }
+                    catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested){throw;}
+                    catch(Exception ex)
+                    {
+                        var failure=DemoFailures.Classify(ex);
+                        if(contentFailure==null||!failure.Retryable)contentFailure=ex;
+                        content.State=!failure.Retryable||next.FailureCount+1>=DemoFailures.MaxAutomaticFailures?"需处理":"失败";
+                        content.ReasonCode=failure.Code;content.Detail=failure.Explanation;
+                        // Continue with the other DEM entries in this archive; each content has its own result.
+                    }
                 }
+                if(contentFailure!=null)
+                {
+                    DemoFailures.Apply(next,contentFailure,DateTime.UtcNow);
+                    if(next.State=="需处理")next.SessionStamp=sessionStamp;
+                    Status="部分 Demo 需要处理："+next.Name;
+                }
+                else
+                {
                 next.State=materialized.Count==0?"已忽略":matched?"已完成":"未匹配";
+                next.FailureCount=0;next.FailureCode="";next.FailureDiagnostic="";next.NextRetryUtc=default;
                 next.Detail=materialized.Count==0?"ZIP 中没有 .dem 文件":string.Join("；",notes.Distinct().Take(8));
                 if(next.Detail.Length==0)next.Detail="没有地图/身份/时间锚点相符的已结束记录；新记录出现后自动重试";
                 next.SessionStamp=sessionStamp;Status=next.State+" · "+next.Name;
+                }
             }
             catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested){next.State="待分析";next.SessionStamp="";throw;}
             catch(Exception ex)
             {
-                next.State="失败";next.Detail=ex.Message.Length>800?ex.Message[..800]:ex.Message;
-                next.NextRetryUtc=DateTime.UtcNow.AddMinutes(Math.Min(60,Math.Pow(2,Math.Min(next.Attempts,6))));
-                Status="Demo 将稍后重试："+next.Name;
+                DemoFailures.Apply(next,ex,DateTime.UtcNow);
+                if(currentHash!=null&&next.Contents.TryGetValue(currentHash,out var content))
+                {content.State=next.State;content.ReasonCode=next.FailureCode;content.Detail=next.Detail;}
+                Status=(next.State=="需处理"?"Demo 需要处理：":"Demo 将稍后重试：")+next.Name;
             }
             finally {Publish();}
             if(ready.Count>1)Wake();

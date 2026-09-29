@@ -14,14 +14,21 @@ public partial class ProgressPage : UserControl
     private bool _parametersShown;
     private double _overviewOffset,_parametersOffset;
     private ProgressSnapshot? _snapshot;
+    private ProgressEvidence _overviewEvidence=ProgressEvidence.LocalInput,_renderedEvidence=ProgressEvidence.LocalInput;
+    private readonly Dictionary<(ProgressEvidence,string),string?> _groupKeys=[];
+    private string _renderedDirection="";
+    public string? SelectedDirection=>direction.SelectedIndex<=0?null:direction.SelectedItem as string;
+    private ProgressEvidence Evidence=>_parametersShown?ProgressEvidence.DemoValidated:_overviewEvidence;
     public bool ChartKeyboardChecked {get;private set;}
-    public event Action<string,string?>? OpenMatch;
+    public event Action<string,string?,string?>? OpenMatch;
     public event Action<int>? Navigate;
     public ProgressPage()
     {
         InitializeComponent();period.ItemsSource=new[]{"全部时间","最近 7 天","最近 30 天"};period.SelectedIndex=0;
-        metric.ItemsSource=new[]{"两键交接时间","两键同时按住","两键都松开的空档","换向到开枪","交接波动"};metric.SelectedIndex=0;
-        chart.MatchClicked+=id=>OpenMatch?.Invoke(id,cohort.SelectedValue as string);
+        direction.ItemsSource=new[]{"全部方向"}.Concat(ProgressAnalysis.Directions).ToArray();direction.SelectedIndex=0;
+        analysisSource.ItemsSource=new[]{"按键习惯 · 无需 Demo","实战验证 · 需要 Demo"};analysisSource.SelectedIndex=0;
+        metric.ItemsSource=new[]{"两键交接时间","两键同时按住","两键都松开的空档","换向到按鼠标","交接波动"};metric.SelectedIndex=0;
+        chart.MatchClicked+=id=>OpenMatch?.Invoke(id,cohort.SelectedValue as string,SelectedDirection);
         LoadProfiles();FillEditor();_updating=false;
     }
     public void SetReports(IReadOnlyList<MatchReport> reports){_reports=reports;LoadProfiles();RefreshGroups();}
@@ -30,7 +37,8 @@ public partial class ProgressPage : UserControl
         if(_parametersShown==show)return;
         if(_parametersShown)_parametersOffset=progressScroll.VerticalOffset;else _overviewOffset=progressScroll.VerticalOffset;
         _parametersShown=show;overviewPanel.Visibility=show?Visibility.Collapsed:Visibility.Visible;parametersPanel.Visibility=show?Visibility.Visible:Visibility.Collapsed;
-        progressScroll.ScrollToVerticalOffset(show?_parametersOffset:_overviewOffset);
+        sourcePanel.Visibility=show?Visibility.Collapsed:Visibility.Visible;
+        RefreshGroups();progressScroll.ScrollToVerticalOffset(show?_parametersOffset:_overviewOffset);
     }
     private void Metric_Changed(object sender,SelectionChangedEventArgs e)
     {
@@ -50,9 +58,10 @@ public partial class ProgressPage : UserControl
     private void Parameters_Click(object sender,RoutedEventArgs e)=>Navigate?.Invoke(1);
     private void Overview_Click(object sender,RoutedEventArgs e)=>Navigate?.Invoke(0);
     private void Demo_Click(object sender,RoutedEventArgs e)=>Navigate?.Invoke(3);
+    private void EmptyPrimary_Click(object sender,RoutedEventArgs e)=>Navigate?.Invoke(Evidence==ProgressEvidence.LocalInput?4:3);
     private void Capture_Click(object sender,RoutedEventArgs e)=>Navigate?.Invoke(4);
     private void Latest_Click(object sender,RoutedEventArgs e)
-    {if(_snapshot?.Matches.LastOrDefault() is {} m)OpenMatch?.Invoke(m.SessionId,cohort.SelectedValue as string);}
+    {if(_snapshot?.Matches.LastOrDefault() is {} m)OpenMatch?.Invoke(m.SessionId,cohort.SelectedValue as string,SelectedDirection);}
     private MatchReport[] InPeriod()
     {
         var since=period.SelectedIndex switch{1=>DateTime.Now.Date.AddDays(-6),2=>DateTime.Now.Date.AddDays(-29),_=>DateTime.MinValue};
@@ -60,8 +69,11 @@ public partial class ProgressPage : UserControl
     }
     private void RefreshGroups()
     {
-        _updating=true;var key=cohort.SelectedValue as string;var groups=ProgressAnalysis.Cohorts(InPeriod());
-        cohort.ItemsSource=groups;cohort.SelectedValue=key;
+        _updating=true;
+        if(cohort.SelectedValue is string previousKey)_groupKeys[(_renderedEvidence,_renderedDirection)]=previousKey;
+        _renderedEvidence=Evidence;_renderedDirection=SelectedDirection??"";
+        var groups=ProgressAnalysis.Cohorts(InPeriod(),Evidence,SelectedDirection);
+        cohort.ItemsSource=groups;cohort.SelectedValue=_groupKeys.GetValueOrDefault((Evidence,_renderedDirection));
         if(cohort.SelectedIndex<0&&groups.Count>0)cohort.SelectedIndex=0;
         cohort.IsEnabled=groups.Count>0;cohortPlaceholder.Visibility=groups.Count==0?Visibility.Visible:Visibility.Collapsed;
         _updating=false;Render();
@@ -69,7 +81,8 @@ public partial class ProgressPage : UserControl
     private void Render()
     {
         if(_updating)return;
-        var reports=InPeriod();var s=ProgressAnalysis.Build(reports,cohort.SelectedValue as string,_history);
+        var reports=InPeriod();bool local=Evidence==ProgressEvidence.LocalInput;
+        var s=ProgressAnalysis.Build(reports,cohort.SelectedValue as string,_history,Evidence,SelectedDirection);
         _snapshot=s;openLatest.IsEnabled=s.Matches.Count>0;
         emptyPanel.Visibility=s.Count==0?Visibility.Visible:Visibility.Collapsed;
         emptyTitle.Text=reports.Length==0?"还没有这个时间范围内的记录":"当前没有可比较的同类动作";
@@ -88,12 +101,38 @@ public partial class ProgressPage : UserControl
         nextStep.Text=s.Count==0?"先确认采集已开启，再导入对应 Demo。完成配对后，趋势会自动更新。":s.Ready?"先记下参数，每次只改一项，再比较同组动作的变化。":
             $"接下来：保持同一套参数，继续积累。距 3 局 / 30 次的基线提示还差 {Math.Max(0,3-s.Matches.Count)} 局、{Math.Max(0,30-s.Count)} 次。";
         selectionNote.Text="初速 ≥34 u/s · 同武器 / 姿态 / 初速组\n慢走与蹲伏各自保留";
+        sourceExplanation.Text=local?"可信的本地按键片段直接参与；未验证游戏速度，不用于急停有效性或参数对比。":"仅使用可信 Demo 配对，并核对初速、运动与输入条件的同类动作。";
+        emptyPrimary.Content=local?"检查后台采集":"导入对应 Demo";
+        emptyCapture.Visibility=local?Visibility.Collapsed:Visibility.Visible;
+        chart.EmptyMessage=local?"有可信按键记录后显示逐局变化":"配对 Demo 后显示逐局变化";
+        cohortLabel.Text=local?"同武器 / 按键状态":"同武器 / 姿态 / 初速";
+        sampleLabel.Text=local?"本地交接样本":"合格反向动作";
+        historySourceColumn.Header=local?"数据来源":"参数方案";
+        openLatest.Content=local?"查看最近按键":"核对最近一局";
+        openSelected.Content=local?"查看所选按键":"查看所选对局";
+        nextStepTitle.Text=local?"保持参数，先看交接变化":"下一步 · 键盘参数";
+        const string distributionHelp="典型值是中位数；常见范围包含中间一半动作；交接波动是该范围的宽度。负值是空档，正值是同按；更一致不等于更准确。";
+        scopeDefinition.Text=distributionHelp+(local?
+            "只收录游戏中换向后 500 ms 内按下 Mouse1、输入连续且两键交接边沿完整的片段。按武器和蹲 / 慢走 / 跳键状态分组，不推断游戏姿态，不按初速筛选；此处样本不是合格急停次数。补齐 Demo 后，本地统计仍保留同一批按键。":
+            "初速低于 34 u/s 不计入；慢走与蹲伏分别比较。图中方案分界只标记相邻对局均有明确参数记录的变化。");
+        if(local)
+        {
+            emptyTitle.Text=reports.Length==0?"还没有这个时间范围内的记录":"当前没有边沿完整的可信按键片段";
+            emptyMessage.Text=reports.Length==0?"保持后台采集运行，完成一局并退出 CS2 后即可查看按键习惯；无需等待 Demo。也可以切换到全部时间。":"本地片段仍需通过游戏内身份、输入连续性和边沿检查。可切换时间范围或检查采集；导入 Demo 不会补出缺失的键盘边沿。";
+            headline.Text=s.Count==0?"等待可信的本地按键片段":s.Ready?"可观察交接习惯；尚未判断制动效果":"本地样本还少，先观察交接节奏";
+            coverage.Text=$"完整边沿 {s.Handoff.Count} 次\n未配对录制贡献 {s.WithoutReliableDemo} 次";
+            coverage.ToolTip="含已配对与未配对录制中的可信本地输入。低速、未接地等游戏条件不在此视图筛选；这不是合格急停次数。";
+            selectionNote.Text="同武器 / 按键状态\n只看时序 · 不筛选游戏速度";
+            nextStep.Text="先保持同一套参数，观察同按、空档和换向到按鼠标的变化。需要判断制动效果或比较键盘方案时，切到 Demo 验证数据。";
+        }
         overlapValue.Text=s.Overlap.Typical;overlapRange.Text=s.Overlap.Range;
         gapValue.Text=s.Gap.Typical;gapRange.Text=s.Gap.Range;
         clickValue.Text=s.Click.Typical;clickRange.Text=s.Click.Range;
         handoffSummary.Text=s.HandoffSummary;
         handoffBar.Show(s);
         chart.SetPoints(s.Matches);trendSummary.Text=ProgressAnalysis.Trend(s);
+        directionNotice.Text=SelectedDirection==null?"当前合并全部方向；方向比例变化也会影响总波动。可切换方向单独比较。":$"当前仅比较 {SelectedDirection}；趋势、参数对照与动作明细使用同一方向。";
+        if(s.Count==0&&SelectedDirection!=null)emptyMessage.Text="当前方向没有符合这一来源条件的同类动作；可切换其他方向、全部方向或时间范围。";
         if(_profileError){adviceTitle.Text="参数记录读取失败";advice.Text="先检查下方提示，现有文件不会被空记录覆盖。";}
         else if(_history.Profiles.Count==0)
         {adviceTitle.Text="先记下当前方案，暂时保持参数";advice.Text="还没有确认过的参数记录，无法知道每局用了哪套触发 / RT。下方已按你之前的截图预填；核对后保存，之后的新对局会自动关联。";}
@@ -137,6 +176,13 @@ public partial class ProgressPage : UserControl
         profileNotes.Text=p?.Notes??"";
         prefillNote.Text=p==null?"按你之前的驱动截图预填：A/D 0.50、W/S 0.85、RT 按下/抬起 0.11 mm。请核对当前实际值后保存；这不是程序给出的推荐数值。":"从最近方案复制，改成你已经在驱动实际应用的值再保存。旧方案会保留。";
     }
+    private void Source_Changed(object sender,SelectionChangedEventArgs e)
+    {
+        if(_updating)return;
+        _overviewEvidence=analysisSource.SelectedIndex==0?ProgressEvidence.LocalInput:ProgressEvidence.DemoValidated;
+        RefreshGroups();progressScroll.ScrollToTop();
+    }
+    private void Direction_Changed(object sender,SelectionChangedEventArgs e){if(!_updating)RefreshGroups();}
     private void Period_Changed(object sender,SelectionChangedEventArgs e){if(!_updating)RefreshGroups();}
     private void Cohort_Changed(object sender,SelectionChangedEventArgs e){if(!_updating)Render();}
     private void Comparison_Changed(object sender,SelectionChangedEventArgs e){if(!_updating)RenderComparison();}
@@ -144,7 +190,7 @@ public partial class ProgressPage : UserControl
     private void History_Selected(object sender,SelectionChangedEventArgs e)
     {if(openSelected!=null)openSelected.IsEnabled=historyGrid.SelectedItem is ProgressMatch;}
     private void OpenSelected_Click(object sender,RoutedEventArgs e)
-    {if(historyGrid.SelectedItem is ProgressMatch m)OpenMatch?.Invoke(m.SessionId,cohort.SelectedValue as string);}
+    {if(historyGrid.SelectedItem is ProgressMatch m)OpenMatch?.Invoke(m.SessionId,cohort.SelectedValue as string,SelectedDirection);}
     private void History_DoubleClick(object sender,MouseButtonEventArgs e)
     {if(ItemsControl.ContainerFromElement(historyGrid,e.OriginalSource as DependencyObject) is DataGridRow)OpenSelected_Click(sender,e);}
     private void SaveProfile_Click(object sender,RoutedEventArgs e)
@@ -197,9 +243,33 @@ public partial class ProgressPage : UserControl
         if(_store.Load().SessionAssignments[match.Id]!="")throw new InvalidOperationException("Unknown scheme UI failed");
     }
     public string SmokeSummary=>headline.Text+"\n"+coverage.Text+"\n"+trendSummary.Text+"\n"+adviceTitle.Text;
-    public object TacticalSmokeState=>new{spread=handoffSpread.Text,median=handoffMedian.Text,samples=sampleTotal.Text,matches=matchTotal.Text,
+    public object TacticalSmokeState=>new{evidence=Evidence.ToString(),direction=SelectedDirection,scope=sourceExplanation.Text,cohort=cohort.SelectedValue,spread=handoffSpread.Text,median=handoffMedian.Text,samples=sampleTotal.Text,matches=matchTotal.Text,
         completeEdges=_snapshot?.Handoff.Count,histogramSamples=_snapshot?.HandoffValues.Count,directions=_snapshot?.Directions,
         layoutWidth=ActualWidth,chartWidth=chart.ActualWidth,readoutWidth=readoutSurface.ActualWidth};
+    public void SetEvidenceForSmoke(ProgressEvidence evidence)
+    {
+        if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")!="1")throw new InvalidOperationException("Only isolated UI checks are allowed.");
+        ShowParameters(false);analysisSource.SelectedIndex=evidence==ProgressEvidence.LocalInput?0:1;
+    }
+    public void CheckEvidenceWorkflowForSmoke()
+    {
+        if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")!="1")throw new InvalidOperationException("Only isolated UI checks are allowed.");
+        SetEvidenceForSmoke(ProgressEvidence.LocalInput);
+        var key=cohort.SelectedValue as string;int count=_snapshot!.Count;
+        if(_snapshot.Profiles.Count!=0||!selectionNote.Text.Contains("不筛选"))throw new InvalidOperationException("Local evidence boundary lost");
+        ShowParameters(true);
+        if(_snapshot!.Evidence!=ProgressEvidence.DemoValidated||sourcePanel.Visibility!=Visibility.Collapsed)throw new InvalidOperationException("Parameters used local evidence");
+        ShowParameters(false);
+        if(cohort.SelectedValue as string!=key||_snapshot!.Count!=count||Evidence!=ProgressEvidence.LocalInput)throw new InvalidOperationException("Returning from parameters lost local scope");
+        SetEvidenceForSmoke(ProgressEvidence.DemoValidated);SetEvidenceForSmoke(ProgressEvidence.LocalInput);
+        if(cohort.SelectedValue as string!=key||_snapshot!.Count!=count)throw new InvalidOperationException("Evidence switch lost group or counts");
+    }
+    public void SetDirectionForSmoke(string? selected)
+    {
+        if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")!="1")throw new InvalidOperationException("Only isolated UI checks are allowed.");
+        direction.SelectedItem=selected??"全部方向";
+        if(_snapshot!.Direction!=selected||_snapshot.Directions.Any(d=>selected!=null&&d.Direction!=selected))throw new InvalidOperationException("Direction scope mismatch");
+    }
     public void SetMetricForSmoke(int index)
     {
         if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")!="1")throw new InvalidOperationException("Only isolated UI checks are allowed.");
@@ -209,7 +279,7 @@ public partial class ProgressPage : UserControl
     {
         if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")!="1")throw new InvalidOperationException("Only isolated UI checks are allowed.");
         var key=cohort.SelectedValue as string;var draft=profileNotes.Text;profileNotes.Text="未保存的界面测试草稿";
-        ShowParameters(true);ShowParameters(false);ShowParameters(true);
+        ShowParameters(true);ShowParameters(false);
         if(profileNotes.Text!="未保存的界面测试草稿"||cohort.SelectedValue as string!=key)throw new InvalidOperationException("Navigation lost draft or cohort");
         int profiles=_store.Load().Profiles.Count;var input=adTrigger.Text;adTrigger.Text="not-a-number";
         SaveProfile_Click(this,new());

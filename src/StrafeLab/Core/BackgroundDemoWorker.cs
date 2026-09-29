@@ -22,7 +22,7 @@ public static class BackgroundDemoWorker
             {
                 try{var info=new FileInfo(file);if(info.Exists)entries.Add($"{file}:{info.Length}:{info.LastWriteTimeUtc.Ticks}");}catch(IOException){}catch(UnauthorizedAccessException){}
             }
-            bool pending=state?.Jobs.Any(j=>j.State is "待分析" or "等待下载完成" || j.State=="失败"&&j.NextRetryUtc<=DateTime.UtcNow)==true;
+            bool pending=state!=null&&(state.QueueVersion!=DemoLibraryState.CurrentQueueVersion||state.Jobs.Any(j=>DemoFailures.IsPending(j,DateTime.UtcNow)));
             return (DemoLibrary.Stamp(string.Join('\n',entries)),pending);
         }
         catch(IOException){return null;}catch(UnauthorizedAccessException){return null;}catch(JsonException){return null;}

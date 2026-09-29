@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using StrafeLab.Core;
@@ -16,16 +17,19 @@ public partial class AnalysisPage : UserControl
     private IReadOnlyList<MatchReport> _reports=[];
     private List<ActionReview> _visible=[];
     private List<DemoJob> _jobs=[];
+    private IReadOnlyList<DemoContentGroup> _groups=[];
     private bool _updating=true,_refreshing;
     private string _reportStamp="";
     private Task _navigationTask=Task.CompletedTask;
+    private InputTimingWindow? _inputReview;
     public AnalysisPage(DemoMonitor monitor)
     {
         _monitor=monitor;InitializeComponent();capturePage.SetMonitor(monitor);
         navOverview.IsChecked=true;
         progressPage.OpenMatch+=OpenProgressMatch;
         progressPage.Navigate+=Navigate;
-        jobFilter.ItemsSource=new[]{"全部任务","已完成","未匹配","失败","处理中","已忽略"};jobFilter.SelectedIndex=0;
+        jobFilter.ItemsSource=new[]{"全部任务","已完成","未匹配","需处理","失败","处理中","已忽略"};jobFilter.SelectedIndex=0;
+        directionFilter.ItemsSource=new[]{"全部方向"}.Concat(ProgressAnalysis.Directions).ToArray();directionFilter.SelectedIndex=0;
         dateFilter.ItemsSource=new[]{"全部日期","最近 7 天","最近 30 天"};dateFilter.SelectedIndex=0;
         stanceFilter.ItemsSource=new[]{"全部姿态","站姿","慢走","蹲姿","蹲起变化","姿态未知"};stanceFilter.SelectedIndex=0;
         speedFilter.ItemsSource=new[]{"全部起速","起速 <50","起速 50–150","起速 ≥150","起速未知"};speedFilter.SelectedIndex=0;
@@ -54,10 +58,10 @@ public partial class AnalysisPage : UserControl
             }
             var root=rootList.SelectedItem as string;rootList.ItemsSource=state.Roots;rootList.SelectedItem=root;
             _jobs=state.Jobs;RenderJobs();
-            jobsComplete.Text=$"已配对 {_jobs.Count(j=>j.State=="已完成")}";
-            jobsWaiting.Text=$"待处理 {_jobs.Count(j=>j.State is not ("已完成" or "未匹配" or "失败" or "已忽略"))}";
-            jobsAttention.Text=$"未匹配 {_jobs.Count(j=>j.State=="未匹配")} / 失败 {_jobs.Count(j=>j.State=="失败")}";
-            jobNotice.Text=_monitor.IsReadOnly?_monitor.Status:$"监控 {state.Roots.Count} 个目录；已忽略 {_jobs.Count(j=>j.State=="已忽略")} 个非 Demo 文件。未匹配表示暂时找不到对应本地记录，不算训练失败。";
+            jobsComplete.Text=$"已配对 {_groups.Count(j=>j.State=="已完成")}";
+            jobsWaiting.Text=$"处理中 {_groups.Count(j=>j.State=="处理中")}";
+            jobsAttention.Text=$"未匹配 {_groups.Count(j=>j.State=="未匹配")} / 需处理 {_groups.Count(j=>j.State=="需处理")} / 待重试 {_groups.Count(j=>j.State=="失败")}";
+            jobNotice.Text=_monitor.IsReadOnly?_monitor.Status:$"监控 {state.Roots.Count} 个目录 · {_groups.Count(g=>!g.Key.StartsWith("file:"))} 份不同 Demo · {_groups.Count(g=>g.Key.StartsWith("file:"))} 条待识别或已忽略文件 · 已归并 {_groups.Sum(g=>Math.Max(0,g.FileCount-1))} 个重复副本。未匹配不影响可信本地按键趋势。";
             enabledBox.IsChecked=state.Enabled;enabledBox.IsEnabled=!_monitor.IsReadOnly;backgroundStatus.Text=_monitor.Status;
             importDemo.IsEnabled=retryJobs.IsEnabled=addRoot.IsEnabled=removeRoot.IsEnabled=!_monitor.IsReadOnly;
             capturePage.Refresh();
@@ -79,7 +83,8 @@ public partial class AnalysisPage : UserControl
         var reports=_reports.Where(r=>r.StartedAtUtc.ToLocalTime()>=since&&(map=="全部地图"||map==r.Map)).ToArray();
         bool Include(ActionReview a)=>(weapon=="全部武器"||weapon==a.Weapon)&&
             (stanceFilter.SelectedIndex==0||stanceFilter.SelectedItem as string==a.Stance)&&
-            (speedFilter.SelectedIndex==0||speedFilter.SelectedItem as string==a.InitialSpeedBand);
+            (speedFilter.SelectedIndex==0||speedFilter.SelectedItem as string==a.InitialSpeedBand)&&
+            (directionFilter.SelectedIndex<=0||directionFilter.SelectedItem as string==a.Direction);
         var selectedReports=reports.Where(r=>string.IsNullOrEmpty(session)||r.SessionId==session).ToArray();
         var candidates=selectedReports.SelectMany(r=>r.Actions).Where(Include).OrderByDescending(a=>a.LocalTime).ToList();
         var eligible=CounterStrafeCohort.Eligible(candidates);
@@ -110,9 +115,17 @@ public partial class AnalysisPage : UserControl
         actionStory.Text="点击上方一条动作，看按键到开枪的过程。";inputTimeline.Show(null);
         RenderActionDetail();
     }
-    private void OpenProgressMatch(string sessionId,string? key)
+    private void OpenProgressMatch(string sessionId,string? key,string? direction)
     {
-        _updating=true;dateFilter.SelectedIndex=0;mapFilter.SelectedIndex=0;sessionFilter.SelectedValue=sessionId;
+        if(InputTimingAnalysis.IsKey(key))
+        {
+            var report=_reports.FirstOrDefault(r=>r.SessionId==sessionId);if(report==null)return;
+            _inputReview?.Close();_inputReview=new InputTimingWindow(report,key!,direction){Owner=Window.GetWindow(this)};
+            if(Environment.GetEnvironmentVariable("STRAFELAB_TEST_MODE")=="1")
+            {_inputReview.ShowActivated=false;_inputReview.ShowInTaskbar=false;_inputReview.WindowStartupLocation=WindowStartupLocation.Manual;_inputReview.Left=-20000;_inputReview.Top=-20000;}
+            _inputReview.Show();return;
+        }
+        _updating=true;dateFilter.SelectedIndex=0;mapFilter.SelectedIndex=0;sessionFilter.SelectedValue=sessionId;directionFilter.SelectedItem=direction??"全部方向";
         var parts=key?.Split('|');
         if(parts?.Length==3){weaponFilter.SelectedItem=parts[0];stanceFilter.SelectedItem=parts[1];speedFilter.SelectedItem=parts[2];}
         else{weaponFilter.SelectedIndex=0;stanceFilter.SelectedIndex=0;speedFilter.SelectedIndex=0;}
@@ -143,20 +156,20 @@ public partial class AnalysisPage : UserControl
     {new[]{navOverview,navKeyboard,navDetails,navDemos,navCapture}[index].IsChecked=true;}
     private void BackToOverview_Click(object sender,RoutedEventArgs e)=>Navigate(0);
     private void ResetFilters_Click(object sender,RoutedEventArgs e)
-    {_updating=true;dateFilter.SelectedIndex=0;mapFilter.SelectedIndex=0;weaponFilter.SelectedIndex=0;sessionFilter.SelectedIndex=0;stanceFilter.SelectedIndex=0;speedFilter.SelectedIndex=0;cohortFilter.SelectedIndex=0;_updating=false;Render();}
+    {_updating=true;dateFilter.SelectedIndex=0;mapFilter.SelectedIndex=0;weaponFilter.SelectedIndex=0;sessionFilter.SelectedIndex=0;stanceFilter.SelectedIndex=0;speedFilter.SelectedIndex=0;cohortFilter.SelectedIndex=0;directionFilter.SelectedIndex=0;_updating=false;Render();}
     private void JobFilter_Changed(object sender,SelectionChangedEventArgs e){if(!_updating)RenderJobs();}
     private void JobSearch_Changed(object sender,TextChangedEventArgs e){if(!_updating)RenderJobs();}
     private void RenderJobs()
     {
-        var selected=(jobGrid.SelectedItem as DemoJob)?.Path;var filter=jobFilter.SelectedItem as string;var query=jobSearch.Text.Trim();
-        var visible=_jobs.Where(j=>(string.IsNullOrEmpty(filter)||filter=="全部任务"||
-            (filter=="处理中"?j.State is not ("已完成" or "未匹配" or "失败" or "已忽略"):j.State==filter))&&
-            (query.Length==0||j.Path.Contains(query,StringComparison.OrdinalIgnoreCase))).OrderByDescending(j=>j.WrittenUtc).ToArray();
-        jobGrid.ItemsSource=visible;jobGrid.SelectedItem=visible.FirstOrDefault(j=>j.Path==selected);
-        if(jobGrid.SelectedItem==null)jobDetail.Text="选择一个文件，查看匹配结果或未完成原因。";
+        var selected=(jobGrid.SelectedItem as DemoContentGroup)?.Key;var filter=jobFilter.SelectedItem as string;var query=jobSearch.Text.Trim();
+        _groups=DemoContentGroups.Build(_jobs,_reports);
+        var visible=_groups.Where(g=>(string.IsNullOrEmpty(filter)||filter=="全部任务"||g.State==filter)&&g.Matches(query)).ToArray();
+        jobGrid.ItemsSource=visible;jobGrid.SelectedItem=visible.FirstOrDefault(g=>g.Key==selected);
+        Job_Selected(this,new SelectionChangedEventArgs(Selector.SelectionChangedEvent,Array.Empty<object>(),Array.Empty<object>()));
         jobEmpty.Visibility=visible.Length==0?Visibility.Visible:Visibility.Collapsed;
-        jobEmpty.Text=_jobs.Count==0?"尚未发现 Demo。可直接导入文件，或在下方添加下载目录。":"没有符合筛选条件的文件。切换到全部任务或清空搜索。";
+        jobEmpty.Text=_groups.Count==0?"尚未发现 Demo。可直接导入文件，或添加下载目录。":"没有符合筛选条件的录像。切换到全部任务或清空搜索。";
     }
+
     private void Match_Selected(object sender,SelectionChangedEventArgs e)
     {if(!_updating&&matchGrid.SelectedItem is MatchReport r)sessionFilter.SelectedValue=r.SessionId;}
     private void Action_Selected(object sender,SelectionChangedEventArgs e)
@@ -177,7 +190,17 @@ public partial class AnalysisPage : UserControl
             $"{a.Cohort} · {a.EligibilityText}。{a.ContextText}。{a.Detail}";
     }
     private void Job_Selected(object sender,SelectionChangedEventArgs e)
-    {if(jobGrid.SelectedItem is DemoJob j)jobDetail.Text=j.Path+"\n"+j.Detail+(j.State=="失败"?$"\n下次重试：{j.NextRetryUtc.ToLocalTime():HH:mm:ss}":"");}
+    {
+        var group=jobGrid.SelectedItem as DemoContentGroup;
+        retrySelected.IsEnabled=ignoreSelected.IsEnabled=group!=null&&!_monitor.IsReadOnly;
+        jobFiles.ItemsSource=group?.Files;
+        jobDetail.Text=group==null?"选择一份录像，查看原因和全部副本。":group.Reason+"\n"+group.Detail;
+        jobDiagnostic.Text=group==null?"":string.Join("\n",group.Files.Select(f=>f.FailureDiagnostic).Where(s=>!string.IsNullOrEmpty(s)).Distinct());
+    }
+    private void RetrySelected_Click(object sender,RoutedEventArgs e)
+    {if(!_monitor.IsReadOnly&&jobGrid.SelectedItem is DemoContentGroup group){_monitor.Retry(group.Files.Select(f=>f.Path));backgroundStatus.Text="已请求重新核对所选内容及相关文件";}}
+    private void IgnoreSelected_Click(object sender,RoutedEventArgs e)
+    {if(!_monitor.IsReadOnly&&jobGrid.SelectedItem is DemoContentGroup group){_monitor.Ignore(group.Files.Select(f=>f.Path));backgroundStatus.Text="已请求忽略相关文件；原文件保留，重试可恢复";}}
     private void Import_Click(object sender,RoutedEventArgs e)
     {
         if(_monitor.IsReadOnly){backgroundStatus.Text=_monitor.Status;return;}
@@ -215,6 +238,23 @@ public partial class AnalysisPage : UserControl
             using var file=File.Create(Path.Combine(directory,name));png.Save(file);
         }
         navOverview.IsChecked=true;progressPage.CheckReviewInteractionsForSmoke();await _navigationTask;navOverview.IsChecked=true;
+        progressPage.CheckEvidenceWorkflowForSmoke();await Capture("input-trends-preview.png");
+        File.WriteAllText(Path.Combine(directory,"input-timing-readouts.json"),System.Text.Json.JsonSerializer.Serialize(progressPage.TacticalSmokeState));
+        progressPage.SetDirectionForSmoke("A→D");await Capture("direction-local-preview.png");
+        File.WriteAllText(Path.Combine(directory,"direction-local.json"),System.Text.Json.JsonSerializer.Serialize(progressPage.TacticalSmokeState));
+        if(progressPage.OpenFirstMatchForSmoke())
+        {
+            if(_inputReview==null||_inputReview.Actions.Count==0)throw new InvalidOperationException("Local timing drilldown missing");
+            if(_inputReview.Actions.Any(a=>a.Direction!="A→D"))throw new InvalidOperationException("Direction lost in local drilldown");
+            _inputReview.CheckSelectionForSmoke();_inputReview.UpdateLayout();
+            var localBitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)_inputReview.ActualWidth,(int)_inputReview.ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);
+            localBitmap.Render(_inputReview);var localPng=new System.Windows.Media.Imaging.PngBitmapEncoder();localPng.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(localBitmap));
+            using(var localFile=File.Create(Path.Combine(directory,"input-timing-detail.png")))localPng.Save(localFile);
+            _inputReview.Close();_inputReview=null;
+        }
+        progressPage.SetDirectionForSmoke("S→W");progressPage.SetDirectionForSmoke(null);
+        var inputWidth=Window.GetWindow(this).Width;Window.GetWindow(this).Width=960;await Capture("input-trends-compact.png");Window.GetWindow(this).Width=inputWidth;
+        progressPage.SetEvidenceForSmoke(ProgressEvidence.DemoValidated);
         await Capture("progress-preview.png");
         await Capture("progress-150pct.png",1.5);
         File.WriteAllText(Path.Combine(directory,"tactical-readouts.json"),System.Text.Json.JsonSerializer.Serialize(progressPage.TacticalSmokeState));
@@ -222,16 +262,20 @@ public partial class AnalysisPage : UserControl
         progressPage.SetMetricForSmoke(0);
         File.WriteAllText(Path.Combine(directory,"progress-summary.txt"),progressPage.SmokeSummary);
         navKeyboard.IsChecked=true;progressPage.ShowSettingsForSmoke();await Capture("keyboard-settings-preview.png");progressPage.ResetScrollForSmoke();
+        progressPage.SetDirectionForSmoke("D→A");navOverview.IsChecked=true;await Capture("direction-validated-preview.png");
+        File.WriteAllText(Path.Combine(directory,"direction-validated.json"),System.Text.Json.JsonSerializer.Serialize(progressPage.TacticalSmokeState));
         if(progressPage.OpenFirstMatchForSmoke())
         {
             await _navigationTask;
             if(tabs.SelectedItem!=detailTab||string.IsNullOrEmpty(sessionFilter.SelectedValue as string)||_visible.Count==0)
                 throw new InvalidOperationException("Progress to match navigation failed");
+            if(_visible.Any(a=>a.Direction!="D→A")||directionFilter.SelectedItem as string!="D→A")throw new InvalidOperationException("Direction lost in validated drilldown");
             await Capture("progress-action-preview.png");
             if(statsScroll.VerticalOffset<=0)throw new InvalidOperationException("Match navigation did not reach action timeline");
         }
+        progressPage.SetDirectionForSmoke(null);
         _updating=true;dateFilter.SelectedIndex=0;mapFilter.SelectedIndex=0;sessionFilter.SelectedIndex=0;
-        weaponFilter.SelectedIndex=0;stanceFilter.SelectedIndex=0;speedFilter.SelectedIndex=0;_updating=false;Render();
+        weaponFilter.SelectedIndex=0;stanceFilter.SelectedIndex=0;speedFilter.SelectedIndex=0;directionFilter.SelectedIndex=0;_updating=false;Render();
         navDetails.IsChecked=true;statsScroll.ScrollToTop();await Capture("analysis-preview.png");
         weaponFilter.SelectedItem="ak47";
         if(weaponFilter.SelectedItem as string=="ak47"&&_visible.Any(a=>a.Weapon!="ak47"))throw new InvalidOperationException("Weapon filter failed");
@@ -258,15 +302,27 @@ public partial class AnalysisPage : UserControl
         }
         statsScroll.ScrollToTop();
         navDemos.IsChecked=true;await Capture("demo-jobs-preview.png");
-        foreach(string state in new[]{"已完成","失败","未匹配"})
+        foreach(string state in new[]{"已完成","失败","未匹配","需处理"})
         {
             jobFilter.SelectedItem=state;
-            if(jobGrid.Items.Count!=_jobs.Count(j=>j.State==state)||jobGrid.Items.Cast<DemoJob>().Any(j=>j.State!=state))throw new InvalidOperationException("Task state filter failed");
+            if(jobGrid.Items.Count!=_groups.Count(j=>j.State==state)||jobGrid.Items.Cast<DemoContentGroup>().Any(j=>j.State!=state))throw new InvalidOperationException("Task state filter failed");
         }
         jobFilter.SelectedIndex=0;jobSearch.Text="fixture-no-such-file-48291";
         if(jobGrid.Items.Count!=0||jobEmpty.Visibility!=Visibility.Visible)throw new InvalidOperationException("Task empty search recovery missing");
         await Capture("demo-empty-search-preview.png");jobSearch.Text="";
-        if(jobGrid.Items.Count!=_jobs.Count)throw new InvalidOperationException("Task search reset failed");
+        if(jobGrid.Items.Count!=_groups.Count)throw new InvalidOperationException("Task search reset failed");
+        var duplicateGroup=_groups.FirstOrDefault(g=>g.FileCount>1);
+        if(duplicateGroup!=null)
+        {
+            jobGrid.SelectedItem=duplicateGroup;
+            if(jobFiles.Items.Count!=duplicateGroup.FileCount)throw new InvalidOperationException("Demo copies not expanded correctly");
+            jobCopies.IsExpanded=true;Window.GetWindow(this).UpdateLayout();demoScroll.ScrollToEnd();await Capture("demo-copies-preview.png");jobCopies.IsExpanded=false;demoScroll.ScrollToTop();
+            jobSearch.Text=duplicateGroup.Files[^1].Path;
+            if(!jobGrid.Items.Cast<DemoContentGroup>().Any(g=>g.Key==duplicateGroup.Key))throw new InvalidOperationException("A copy path must find its content group");
+            jobSearch.Text="";
+        }
+        var blockedGroup=_groups.FirstOrDefault(g=>g.State=="需处理");
+        if(blockedGroup!=null){jobGrid.SelectedItem=blockedGroup;Window.GetWindow(this).UpdateLayout();demoScroll.ScrollToEnd();await Capture("demo-needs-action-preview.png");demoScroll.ScrollToTop();}
         navCapture.IsChecked=true;await capturePage.CheckCacheForSmokeAsync();await Capture("capture-settings-preview.png");
         var captureWidth=Window.GetWindow(this).Width;Window.GetWindow(this).Width=1040;await Capture("cache-compact-preview.png");Window.GetWindow(this).Width=captureWidth;
         await capturePage.CheckCacheCleanupForSmokeAsync();await Capture("cache-cleaned-preview.png");
@@ -281,6 +337,6 @@ public partial class AnalysisPage : UserControl
         Window.GetWindow(this).Width=originalWidth;Window.GetWindow(this).Height=originalHeight;
         navOverview.IsChecked=true;
         progressPage.CheckProfileWorkflowForSmoke();
-        File.WriteAllText(Path.Combine(directory,"review-interactions.json"),System.Text.Json.JsonSerializer.Serialize(new{navigation=true,draftPreserved=true,invalidFormPreserved=true,keyboardChart=progressPage.ChartKeyboardChecked,taskFilters=true,emptySearchRecovery=true,chartMetrics=5,renderDpi=new[]{96,144},widths=new[]{originalWidth,1040,960},syntheticInputOnly=true}));
+        File.WriteAllText(Path.Combine(directory,"review-interactions.json"),System.Text.Json.JsonSerializer.Serialize(new{navigation=true,directionDrilldown=true,demoContentGroups=true,draftPreserved=true,invalidFormPreserved=true,keyboardChart=progressPage.ChartKeyboardChecked,taskFilters=true,emptySearchRecovery=true,chartMetrics=5,renderDpi=new[]{96,144},widths=new[]{originalWidth,1040,960},syntheticInputOnly=true}));
     }
 }

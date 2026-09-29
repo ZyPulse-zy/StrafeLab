@@ -13,7 +13,7 @@ public sealed class AnalysisWindow : Window
     private bool _closing,_ready;
     public AnalysisWindow()
     {
-        Title="StrafeLab 1.7 · 战术分析台";Width=Math.Min(1360,SystemParameters.WorkArea.Width-40);Height=Math.Min(960,SystemParameters.WorkArea.Height-40);MinWidth=960;MinHeight=700;
+        Title="StrafeLab 1.9 · 战术分析台";Width=Math.Min(1360,SystemParameters.WorkArea.Width-40);Height=Math.Min(960,SystemParameters.WorkArea.Height-40);MinWidth=960;MinHeight=700;
         Background=TacticalDrawing.Background;Content=new AnalysisPage(_monitor);
         SourceInitialized+=(_,_)=>
         {

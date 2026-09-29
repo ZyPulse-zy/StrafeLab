@@ -1,6 +1,17 @@
 using System.Text.Json;
 using StrafeLab.Core;
 // Offline queue acceptance: no RuntimeService, HID, Raw Input or GSI startup.
+if(args.Length==2&&args[0]=="--index")
+{
+    var store=new SessionStore(args[1]);var library=new DemoLibrary(args[1],[]);
+    var reports=library.ReadReports().ToDictionary(r=>r.SessionId);
+    var timer=System.Diagnostics.Stopwatch.StartNew();
+    var catalog=new SessionCatalog(args[1]);var entries=catalog.Refresh(store,library,reports,default);
+    var cold=new{loaded=catalog.LastLoadedCount,finished=entries.Count,milliseconds=timer.ElapsedMilliseconds};
+    timer.Restart();var restarted=new SessionCatalog(args[1]);restarted.Refresh(store,library,reports,default);
+    Console.WriteLine(JsonSerializer.Serialize(new{cold,restarted=new{loaded=restarted.LastLoadedCount,milliseconds=timer.ElapsedMilliseconds},reports=reports.Count}));
+    return;
+}
 if(args.Length<2)throw new ArgumentException("Usage: AnalysisCheck <isolated data directory> <watch directory> [watch directory ...]");
 await using var monitor=new DemoMonitor(new SessionStore(args[0]),args.Skip(1));
 await monitor.ScanOnceAsync();

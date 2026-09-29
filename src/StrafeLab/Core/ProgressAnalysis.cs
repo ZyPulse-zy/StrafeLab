@@ -1,5 +1,6 @@
 namespace StrafeLab.Core;
 
+public enum ProgressEvidence { DemoValidated, LocalInput }
 public sealed record ProgressCohort(string Key,string Label,int Actions,int Matches);
 public sealed record TimingDistribution(int Count,double? Median,double? Q25,double? Q75)
 {
@@ -29,6 +30,9 @@ public sealed record ProgressSnapshot(ProgressCohort? Cohort,IReadOnlyList<Progr
     TimingDistribution Overlap,TimingDistribution Gap,TimingDistribution Click,
     IReadOnlyList<ProfileComparison> Profiles,int UnknownProfileActions)
 {
+    public ProgressEvidence Evidence {get;init;}=ProgressEvidence.DemoValidated;
+    public string? Direction {get;init;}
+    public int WithoutReliableDemo {get;init;}
     public int Count=>Matches.Sum(m=>m.Count);
     public bool Ready=>Count>=ProgressAnalysis.MinimumActions&&Matches.Count>=ProgressAnalysis.MinimumMatches;
     public int ReverseFirst {get;init;}
@@ -38,12 +42,16 @@ public sealed record ProgressSnapshot(ProgressCohort? Cohort,IReadOnlyList<Progr
     public TimingDistribution Handoff {get;init;}=new(0,null,null,null);
     public IReadOnlyList<double> HandoffValues {get;init;}=[];
     public IReadOnlyList<DirectionHandoff> Directions {get;init;}=[];
-    public string HandoffSummary=>Count==0?"配对完成后显示交接习惯":
+    public string HandoffSummary=>Count==0?(Evidence==ProgressEvidence.LocalInput?"有可信的完整按键片段后显示交接习惯":"配对完成后显示交接习惯"):
         $"交接习惯：{ReverseFirst} 次先按反向键，{ReleaseFirst} 次先松原键，{SameTimestamp} 次同一记录时刻"+
         (UnknownHandoff>0?$"，{UnknownHandoff} 次边沿缺失":"")+"。这是顺序分布，不是好坏评分。";
 }
 public static class ProgressAnalysis
 {
+    public static readonly string[] Directions=["A→D","D→A","W→S","S→W"];
+    public static bool InDirection(ActionReview action,string? direction)=>direction==null||action.Direction==direction;
+    private static void ValidateDirection(string? direction)
+    {if(direction!=null&&!Directions.Contains(direction))throw new ArgumentException("Unknown direction",nameof(direction));}
     // Product prompts for gathering a baseline, not statistical significance or game rules.
     public const int MinimumActions=30,MinimumMatches=3,MinimumActionsPerPoint=5;
     public static string WeaponName(string weapon)=>weapon switch
@@ -51,15 +59,26 @@ public static class ProgressAnalysis
      "usp_silencer"=>"USP-S","glock"=>"Glock-18","deagle"=>"沙漠之鹰","galilar"=>"加利尔 AR",
      "famas"=>"FAMAS","mac10"=>"MAC-10","mp9"=>"MP9",_=>weapon.ToUpperInvariant()};
     public static string Key(ActionReview a)=>$"{a.Weapon}|{a.Stance}|{a.InitialSpeedBand}";
-    private static IEnumerable<(MatchReport Report,ActionReview Action)> Rows(IEnumerable<MatchReport> reports)
-        =>reports.Where(r=>r.Version==MatchReport.CurrentVersion&&r.Alignment?.IsReliable==true)
-            .SelectMany(r=>r.Actions.Where(a=>a.EligibleForStats&&a.PriorSpeed>=CounterStrafeCohort.MinimumInitialSpeed)
-                .Select(a=>(Report:r,Action:a)));
-    public static IReadOnlyList<ProgressCohort> Cohorts(IEnumerable<MatchReport> reports)=>Rows(reports)
-        .GroupBy(x=>Key(x.Action)).Select(g=>new ProgressCohort(g.Key,
+    private static IEnumerable<(MatchReport Report,ActionReview Action)> Rows(IEnumerable<MatchReport> reports,ProgressEvidence evidence)
+    {
+        var current=reports.Where(r=>r.Version==MatchReport.CurrentVersion);
+        if(evidence==ProgressEvidence.LocalInput)
+            return current.GroupBy(r=>r.SessionId).Select(g=>g.OrderByDescending(r=>r.UpdatedAtUtc).ThenByDescending(r=>r.Alignment?.IsReliable==true).First())
+                .SelectMany(r=>r.Actions.Where(InputTimingAnalysis.IsEligible).DistinctBy(a=>a.TransitionUs).Select(a=>(Report:r,Action:a)));
+        return current.Where(r=>r.Alignment?.IsReliable==true)
+            .SelectMany(r=>r.Actions.Where(a=>a.EligibleForStats&&a.PriorSpeed>=CounterStrafeCohort.MinimumInitialSpeed).Select(a=>(Report:r,Action:a)));
+    }
+    private static string GroupKey(ActionReview a,ProgressEvidence evidence)=>evidence==ProgressEvidence.LocalInput?InputTimingAnalysis.Key(a):Key(a);
+    public static IReadOnlyList<ProgressCohort> Cohorts(IEnumerable<MatchReport> reports,ProgressEvidence evidence=ProgressEvidence.DemoValidated,string? direction=null)
+    {
+        ValidateDirection(direction);
+        return Rows(reports,evidence).Where(x=>InDirection(x.Action,direction))
+        .GroupBy(x=>GroupKey(x.Action,evidence)).Select(g=>new ProgressCohort(g.Key,
+            evidence==ProgressEvidence.LocalInput?$"{WeaponName(g.First().Action.Weapon)} · {InputTimingAnalysis.ModifierLabel(g.First().Action)}":
             $"{WeaponName(g.First().Action.Weapon)} · {g.First().Action.Stance} · {g.First().Action.InitialSpeedBand.Replace("起速","初速")}",
             g.Count(),g.Select(x=>x.Report.SessionId).Distinct().Count()))
         .OrderByDescending(g=>g.Matches).ThenByDescending(g=>g.Actions).ThenBy(g=>g.Key).ToArray();
+    }
     public static TimingDistribution Distribution(IEnumerable<double?> source)
     {
         var values=source.Where(v=>v.HasValue&&double.IsFinite(v.Value)).Select(v=>v!.Value).Order().ToArray();
@@ -68,17 +87,19 @@ public static class ProgressAnalysis
     }
     // Signed key handoff: overlap positive, a no-key gap negative. Unknown edges stay unknown.
     public static double? Handoff(ActionReview a)=>a.OverlapMs.HasValue&&a.GapMs.HasValue?a.OverlapMs-a.GapMs:null;
-    public static ProgressSnapshot Build(IEnumerable<MatchReport> reports,string? key,KeyboardProfileHistory history)
+    public static ProgressSnapshot Build(IEnumerable<MatchReport> reports,string? key,KeyboardProfileHistory history,ProgressEvidence evidence=ProgressEvidence.DemoValidated,string? direction=null)
     {
-        var reportArray=reports.ToArray();var cohort=Cohorts(reportArray).FirstOrDefault(c=>c.Key==key);
-        var rows=Rows(reportArray).Where(x=>Key(x.Action)==key).ToArray();
+        ValidateDirection(direction);
+        var reportArray=reports.ToArray();var cohort=Cohorts(reportArray,evidence,direction).FirstOrDefault(c=>c.Key==key);
+        var rows=Rows(reportArray,evidence).Where(x=>GroupKey(x.Action,evidence)==key&&InDirection(x.Action,direction)).ToArray();
         var matches=rows.GroupBy(x=>x.Report.SessionId).OrderBy(g=>g.First().Report.StartedAtUtc).Select(g=>
         {
             var r=g.First().Report;var a=g.Select(x=>x.Action).ToArray();
-            return new ProgressMatch(r.SessionId,r.StartedAtUtc,r.Map,a.Length,history.For(r)?.Name??"参数未记录",
-                Distribution(a.Select(x=>x.OverlapMs)),Distribution(a.Select(x=>x.GapMs)),Distribution(a.Select(x=>(double?)x.ClickMs)),Distribution(a.Select(Handoff))){SchemeId=history.For(r)?.Id};
+            bool local=evidence==ProgressEvidence.LocalInput;
+            return new ProgressMatch(r.SessionId,r.StartedAtUtc,r.Map,a.Length,local?(r.Alignment?.IsReliable==true?"本地输入 · 已有 Demo":"本地输入 · 未配对 Demo"):history.For(r)?.Name??"参数未记录",
+                Distribution(a.Select(x=>x.OverlapMs)),Distribution(a.Select(x=>x.GapMs)),Distribution(a.Select(x=>(double?)x.ClickMs)),Distribution(a.Select(Handoff))){SchemeId=local?null:history.For(r)?.Id};
         }).ToArray();
-        var profiles=rows.Where(x=>history.For(x.Report)!=null).GroupBy(x=>history.For(x.Report)!.Id).Select(g=>
+        var profiles=rows.Where(x=>evidence==ProgressEvidence.DemoValidated&&history.For(x.Report)!=null).GroupBy(x=>history.For(x.Report)!.Id).Select(g=>
         {
             var p=history.Profiles.Single(p=>p.Id==g.Key);var a=g.Select(x=>x.Action).ToArray();
             return new ProfileComparison(p.Id,p.Name,a.Length,g.Select(x=>x.Report.SessionId).Distinct().Count(),p.Description,
@@ -87,6 +108,7 @@ public static class ProgressAnalysis
         return new(cohort,matches,Distribution(rows.Select(x=>x.Action.OverlapMs)),Distribution(rows.Select(x=>x.Action.GapMs)),
             Distribution(rows.Select(x=>(double?)x.Action.ClickMs)),profiles,rows.Count(x=>history.For(x.Report)==null))
         {
+            Evidence=evidence,Direction=direction,WithoutReliableDemo=rows.Count(x=>x.Report.Alignment?.IsReliable!=true),
             ReverseFirst=rows.Count(x=>Handoff(x.Action)>0),ReleaseFirst=rows.Count(x=>Handoff(x.Action)<0),
             SameTimestamp=rows.Count(x=>Handoff(x.Action)==0),UnknownHandoff=rows.Count(x=>!Handoff(x.Action).HasValue),
             Handoff=Distribution(rows.Select(x=>Handoff(x.Action))),
